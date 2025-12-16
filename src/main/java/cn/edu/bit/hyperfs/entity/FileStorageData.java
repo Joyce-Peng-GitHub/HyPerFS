@@ -1,17 +1,17 @@
 package cn.edu.bit.hyperfs.entity;
 
-public class FileMetadata {
+public class FileStorageData {
     private byte[] hashValue; // 文件哈希值
     private long fileSize; // 文件大小
     private int referenceCount; // 引用计数
 
-    public FileMetadata(byte[] hashValue, long fileSize, int referenceCount) {
+    public FileStorageData(byte[] hashValue, long fileSize, int referenceCount) {
         setHashValue(hashValue);
         setFileSize(fileSize);
         setReferenceCount(referenceCount);
     }
 
-    public FileMetadata() {
+    public FileStorageData() {
         this(null, 0, 0);
     }
 
