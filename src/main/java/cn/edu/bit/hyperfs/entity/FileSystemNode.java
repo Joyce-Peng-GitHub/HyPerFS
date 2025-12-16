@@ -1,31 +1,45 @@
 package cn.edu.bit.hyperfs.entity;
 
-enum FileSystemNodeType {
-    FILE,
-    DIRECTORY
-}
-
 public class FileSystemNode {
-    private Long id; // 标识该条记录的唯一ID
-    private Long parentId; // 父节点ID，根节点为null
+    public enum NodeType {
+        FILE,
+        DIRECTORY
+    }
+
+    private long id; // 标识该条记录的唯一ID
+    private long parentId; // 父节点ID，根节点为null
     private String name; // 文件或文件夹名称
-    private FileSystemNodeType type; // 文件系统节点类型，文件或文件夹
-    private FileMetadata fileMetadata; // 文件元数据，文件夹则为null
+    private NodeType nodeType; // 文件系统节点类型，文件或文件夹
+    private FileStorageData fileStorageData; // 文件元数据，文件夹则为null
     private FileSystemNodeStatistics fileSystemNodeStatistics; // 文件统计信息，文件夹则为总和
 
-    public Long getId() {
+    public FileSystemNode() {
+        this(0, 0, null, null, null, null);
+    }
+
+    public FileSystemNode(long id, long parentId, String name, NodeType type,
+            FileStorageData fileMetadata, FileSystemNodeStatistics fileSystemNodeStatistics) {
+        setId(id);
+        setParentId(parentId);
+        setName(name);
+        setNodeType(type);
+        setFileStorageData(fileMetadata);
+        setFileSystemNodeStatistics(fileSystemNodeStatistics);
+    }
+
+    public long getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(long id) {
         this.id = id;
     }
 
-    public Long getParentId() {
+    public long getParentId() {
         return parentId;
     }
 
-    public void setParentId(Long parentId) {
+    public void setParentId(long parentId) {
         this.parentId = parentId;
     }
 
@@ -37,20 +51,20 @@ public class FileSystemNode {
         this.name = name;
     }
 
-    public FileSystemNodeType getType() {
-        return type;
+    public NodeType getNodeType() {
+        return nodeType;
     }
 
-    public void setType(FileSystemNodeType type) {
-        this.type = type;
+    public void setNodeType(NodeType type) {
+        this.nodeType = type;
     }
 
-    public FileMetadata getFileMetadata() {
-        return fileMetadata;
+    public FileStorageData getFileStorageData() {
+        return fileStorageData;
     }
 
-    public void setFileMetadata(FileMetadata fileMetadata) {
-        this.fileMetadata = fileMetadata;
+    public void setFileStorageData(FileStorageData fileMetadata) {
+        this.fileStorageData = fileMetadata;
     }
 
     public FileSystemNodeStatistics getFileSystemNodeStatistics() {
