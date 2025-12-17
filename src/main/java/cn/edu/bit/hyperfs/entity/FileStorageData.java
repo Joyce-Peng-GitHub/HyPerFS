@@ -1,11 +1,11 @@
 package cn.edu.bit.hyperfs.entity;
 
 public class FileStorageData {
-    private byte[] hashValue; // 文件哈希值
+    private String hashValue; // 文件哈希值
     private long fileSize; // 文件大小
     private int referenceCount; // 引用计数
 
-    public FileStorageData(byte[] hashValue, long fileSize, int referenceCount) {
+    public FileStorageData(String hashValue, long fileSize, int referenceCount) {
         setHashValue(hashValue);
         setFileSize(fileSize);
         setReferenceCount(referenceCount);
@@ -15,13 +15,13 @@ public class FileStorageData {
         this(null, 0, 0);
     }
 
-    public byte[] getHashValue() {
+    public String getHashValue() {
         return hashValue;
     }
 
-    public void setHashValue(byte[] hashValue) {
-        if (hashValue.length != 32) {
-            throw new IllegalArgumentException("Hash value must be 32 bytes long");
+    public void setHashValue(String hashValue) {
+        if (hashValue.length() != 64) {
+            throw new IllegalArgumentException("Hash value must be 64 characters long");
         }
         this.hashValue = hashValue;
     }
