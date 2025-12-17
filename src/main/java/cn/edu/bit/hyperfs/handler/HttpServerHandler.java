@@ -8,7 +8,7 @@ import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.edu.bit.hyperfs.entity.FileSystemNode;
+import cn.edu.bit.hyperfs.entity.FileMetaNode;
 import cn.edu.bit.hyperfs.service.FileUploadSession;
 
 import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
@@ -27,7 +27,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private File dataDirectory = new File(DEFAULT_DATA_DIRECTORY);
     private File tmpDirectory = new File(DEFAULT_TMP_DIRECTORY);
     private FileUploadSession uploadSession = null;
-    private FileSystemNode node = null;
+    private FileMetaNode node = null;
 
     public HttpServerHandler() {
         super();
@@ -84,7 +84,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 : DEFAULT_FILENAME;
         // TODO: 调用数据库获得父节点ID
         long parentId = 0; // 临时使用根节点ID
-        node = new FileSystemNode(0, parentId, filename, FileSystemNode.NodeType.FILE, null, null);
+        node = new FileMetaNode(0, parentId, filename, FileMetaNode.NodeType.FILE, null, null);
         // 处理 Expect: 100-continue (HTTP 协议规范)
         if (HttpUtil.is100ContinueExpected(request)) {
             context.writeAndFlush(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE));
@@ -105,7 +105,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private void handleUploadCompletion(ChannelHandlerContext context) throws Exception {
         try {
             var result = uploadSession.finish(dataDirectory);
-            node.setFileStorageData(result);
+            node.setStorageData(result);
             String responseJson = "{\"status\":\"success\", \"fileId\":\"" + node.getId() + "\"}";
             sendResponse(context, OK, responseJson);
             System.out.println("File uploaded successfully: " + node.getName());
