@@ -1,15 +1,15 @@
 package cn.edu.bit.hyperfs.entity;
 
-public class FileSystemNodeStatistics {
+public class FileStatistics {
     private long uploadTime; // 文件的上传时间或文件夹的最后修改时间
     private int downloadCount; // 文件下载次数或文件夹中文件的总下载次数
 
-    public FileSystemNodeStatistics(long uploadTime, int downloadCount) {
+    public FileStatistics(long uploadTime, int downloadCount) {
         setUploadTime(uploadTime);
         setDownloadCount(downloadCount);
     }
 
-    public FileSystemNodeStatistics() {
+    public FileStatistics() {
         this(0, 0);
     }
 

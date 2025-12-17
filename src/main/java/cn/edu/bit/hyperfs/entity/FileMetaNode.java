@@ -1,6 +1,6 @@
 package cn.edu.bit.hyperfs.entity;
 
-public class FileSystemNode {
+public class FileMetaNode {
     public enum NodeType {
         FILE,
         DIRECTORY
@@ -10,21 +10,21 @@ public class FileSystemNode {
     private long parentId; // 父节点ID，根节点为null
     private String name; // 文件或文件夹名称
     private NodeType nodeType; // 文件系统节点类型，文件或文件夹
-    private FileStorageData fileStorageData; // 文件元数据，文件夹则为null
-    private FileSystemNodeStatistics fileSystemNodeStatistics; // 文件统计信息，文件夹则为总和
+    private FileStorageData storageData; // 文件元数据，文件夹则为null
+    private FileStatistics statistics; // 文件统计信息，文件夹则为总和
 
-    public FileSystemNode() {
+    public FileMetaNode() {
         this(0, 0, null, null, null, null);
     }
 
-    public FileSystemNode(long id, long parentId, String name, NodeType type,
-            FileStorageData fileMetadata, FileSystemNodeStatistics fileSystemNodeStatistics) {
+    public FileMetaNode(long id, long parentId, String name, NodeType type,
+            FileStorageData storageData, FileStatistics statistics) {
         setId(id);
         setParentId(parentId);
         setName(name);
         setNodeType(type);
-        setFileStorageData(fileMetadata);
-        setFileSystemNodeStatistics(fileSystemNodeStatistics);
+        setStorageData(storageData);
+        setStatistics(statistics);
     }
 
     public long getId() {
@@ -59,19 +59,19 @@ public class FileSystemNode {
         this.nodeType = type;
     }
 
-    public FileStorageData getFileStorageData() {
-        return fileStorageData;
+    public FileStorageData getStorageData() {
+        return storageData;
     }
 
-    public void setFileStorageData(FileStorageData fileMetadata) {
-        this.fileStorageData = fileMetadata;
+    public void setStorageData(FileStorageData storageData) {
+        this.storageData = storageData;
     }
 
-    public FileSystemNodeStatistics getFileSystemNodeStatistics() {
-        return fileSystemNodeStatistics;
+    public FileStatistics getStatistics() {
+        return statistics;
     }
 
-    public void setFileSystemNodeStatistics(FileSystemNodeStatistics fileSystemNodeStatistics) {
-        this.fileSystemNodeStatistics = fileSystemNodeStatistics;
+    public void setStatistics(FileStatistics statistics) {
+        this.statistics = statistics;
     }
 }
