@@ -6,8 +6,8 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 
 import cn.edu.bit.hyperfs.entity.FileStorageData;
-import cn.edu.bit.hyperfs.utils.HexUtils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 
 public class FileUploadSession {
 	private final File tmpFile; // 临时文件句柄
@@ -61,7 +61,7 @@ public class FileUploadSession {
 		// TODO: 检查文件是否已存在，若存在则删除临时文件并增加引用计数
 
 		// 将临时文件移动到数据目录
-		var finalFile = new File(dataDirectory, HexUtils.bytesToHex(hashValue));
+		var finalFile = new File(dataDirectory, ByteBufUtil.hexDump(hashValue));
 		if (!tmpFile.renameTo(finalFile)) {
 			throw new Exception("Failed to move temporary file to data directory");
 		}
