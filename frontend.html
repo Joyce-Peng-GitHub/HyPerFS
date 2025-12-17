@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>高性能文件服务器测试终端</title>
+        <style>
+            :root {
+                --primary: #059669;
+                --bg: #f0fdf4;
+                --card-bg: #ffffff;
+                --border: #bbf7d0;
+                --text: #1e293b;
+            }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                    Roboto, sans-serif;
+                background-color: var(--bg);
+                color: var(--text);
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            h1 {
+                color: #047857;
+            }
+            h2 {
+                border-bottom: 2px solid var(--primary);
+                padding-bottom: 10px;
+                margin-top: 30px;
+                font-size: 1.2em;
+            }
+            .card {
+                background: var(--card-bg);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: bold;
+                font-size: 0.9em;
+                color: #374151;
+            }
+            input[type="text"],
+            select,
+            textarea {
+                width: 100%;
+                padding: 8px;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                box-sizing: border-box;
+                font-family: monospace;
+            }
+            textarea {
+                height: 80px;
+                resize: vertical;
+            }
+            button {
+                background-color: var(--primary);
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: background 0.2s;
+            }
+            button:hover {
+                background-color: #047857;
+            }
+            #response-area {
+                background: #0f172a;
+                color: #4ade80;
+                padding: 15px;
+                border-radius: 4px;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                font-family: "Menlo", "Monaco", monospace;
+                min-height: 100px;
+                font-size: 0.85em;
+            }
+            .badge {
+                display: inline-block;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 0.75em;
+                font-weight: bold;
+                margin-left: 5px;
+            }
+            .badge-fast {
+                background: #dcfce7;
+                color: #166534;
+                border: 1px solid #86efac;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>⚡ 高性能文件服务器测试</h1>
+
+        <div class="card">
+            <div class="form-group">
+                <label for="serverUrl">目标服务器地址 (URL)</label>
+                <input
+                    type="text"
+                    id="serverUrl"
+                    value="http://localhost:3000/upload"
+                    placeholder="例如: http://localhost:3000/upload"
+                />
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>文件上传测试</h2>
+
+            <div class="form-group">
+                <label>上传模式</label>
+                <select id="uploadMode" onchange="toggleHint()">
+                    <option value="raw">
+                        🚀 二进制流 (POST) - 高性能/无Boundary
+                    </option>
+                    <option value="form">
+                        📦 表单模式 (POST) - 传统 Multipart
+                    </option>
+                </select>
+                <div
+                    id="mode-hint"
+                    style="
+                        font-size: 0.85em;
+                        color: #666;
+                        margin-top: 5px;
+                        background: #f1f5f9;
+                        padding: 8px;
+                        border-radius: 4px;
+                    "
+                >
+                    当前模式：直接将文件字节写入 Request
+                    Body。适合大文件传输，服务器无需解析 multipart。
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>选择文件</label>
+                <input type="file" id="fileInput" />
+            </div>
+
+            <button onclick="uploadFile()">开始上传</button>
+        </div>
+
+        <div class="card">
+            <label>服务器响应</label>
+            <div id="response-area">等待操作...</div>
+        </div>
+
+        <script>
+            function log(data) {
+                const area = document.getElementById("response-area");
+                const content =
+                    typeof data === "object"
+                        ? JSON.stringify(data, null, 2)
+                        : data;
+                area.textContent =
+                    `[${new Date().toLocaleTimeString()}] ${content}\n\n` +
+                    area.textContent;
+            }
+
+            function toggleHint() {
+                const mode = document.getElementById("uploadMode").value;
+                const hint = document.getElementById("mode-hint");
+                if (mode === "raw") {
+                    hint.textContent =
+                        "当前模式：直接将文件字节写入 Request Body。适合大文件传输，服务器无需解析 multipart。";
+                } else {
+                    hint.textContent =
+                        "当前模式：将文件封装在 multipart/form-data 中。包含 Boundary 分界符，兼容性好但有解析开销。";
+                }
+            }
+
+            async function uploadFile() {
+                const fileInput = document.getElementById("fileInput");
+                const file = fileInput.files[0];
+                const baseUrl = document.getElementById("serverUrl").value;
+                const mode = document.getElementById("uploadMode").value;
+
+                if (!file) {
+                    alert("请先选择一个文件！");
+                    return;
+                }
+
+                // 1. 处理 URL 查询参数 (filename)
+                const separator = baseUrl.includes("?") ? "&" : "?";
+                // 使用 encodeURIComponent 确保文件名安全传输
+                const uploadUrl = `${baseUrl}${separator}filename=${encodeURIComponent(
+                    file.name
+                )}`;
+
+                log(
+                    `正在上传 (${
+                        mode === "raw" ? "POST 二进制流" : "POST 表单"
+                    })...`
+                );
+                log(`目标: ${uploadUrl}`);
+
+                try {
+                    let options = {};
+
+                    if (mode === "raw") {
+                        // === 关键逻辑：PUT 二进制流 ===
+                        // Body 直接设置为 file 对象（它是一个 Blob/Binary）
+                        options = {
+                            method: "POST",
+                            headers: {
+                                // 建议设置为 generic binary 或者文件的真实类型
+                                "Content-Type": "application/octet-stream",
+                            },
+                            body: file,
+                        };
+                    } else {
+                        // === 传统逻辑：POST FormData ===
+                        const formData = new FormData();
+                        formData.append("file", file);
+                        options = {
+                            method: "POST",
+                            body: formData,
+                        };
+                    }
+
+                    const response = await fetch(uploadUrl, options);
+                    const result = await parseResponse(response);
+                    log(result);
+                } catch (error) {
+                    log(`上传失败: ${error.message}`);
+                }
+            }
+
+            async function parseResponse(response) {
+                const text = await response.text();
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    return `Status: ${response.status}\nBody: ${text}`;
+                }
+            }
+        </script>
+    </body>
+</html>
