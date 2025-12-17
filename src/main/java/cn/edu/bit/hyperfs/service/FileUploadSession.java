@@ -58,6 +58,8 @@ public class FileUploadSession {
 
 		byte[] hashValue = digest.digest();
 
+		// TODO: 检查文件是否已存在，若存在则删除临时文件并增加引用计数
+
 		// 将临时文件移动到数据目录
 		var finalFile = new File(dataDirectory, HexUtils.bytesToHex(hashValue));
 		if (!tmpFile.renameTo(finalFile)) {
