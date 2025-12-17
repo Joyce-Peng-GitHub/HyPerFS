@@ -42,8 +42,22 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     @Override
     protected void channelRead0(ChannelHandlerContext context, HttpObject message) throws Exception {
         if (message instanceof HttpRequest request) {
+            if (request.decoderResult().isFailure()) {
+                System.out.println("Bad Request: " + request.uri());
+                sendResponse(context, BAD_REQUEST, "{\"error\":\"Bad Request\"}");
+                return;
+            }
+
             System.out.println(request.method() + " " + request.uri());
-            if (request.method().equals(HttpMethod.POST) && request.uri().startsWith("/upload")) {
+            if (request.method().equals(HttpMethod.OPTIONS)) {
+                // 处理预检请求
+                FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK);
+                response.headers().set("Access-Control-Allow-Origin", "*");
+                response.headers().set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+                response.headers().set("Access-Control-Allow-Headers", "Content-Type, Accept");
+                context.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+                return;
+            } else if (request.method().equals(HttpMethod.POST) && request.uri().startsWith("/upload")) {
                 handleUploadRequest(context, request);
             } else {
                 sendResponse(context, NOT_FOUND, "{\"error\":\"Not Found\"}");
