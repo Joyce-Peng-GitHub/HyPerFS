@@ -3,249 +3,207 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>高性能文件服务器测试终端</title>
+        <title>二进制流文件上传工具</title>
         <style>
-            :root {
-                --primary: #059669;
-                --bg: #f0fdf4;
-                --card-bg: #ffffff;
-                --border: #bbf7d0;
-                --text: #1e293b;
-            }
             body {
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
                     Roboto, sans-serif;
-                background-color: var(--bg);
-                color: var(--text);
-                max-width: 800px;
+                padding: 2rem;
+                max-width: 600px;
                 margin: 0 auto;
-                padding: 20px;
+                background-color: #f5f5f5;
             }
-            h1 {
-                color: #047857;
-            }
-            h2 {
-                border-bottom: 2px solid var(--primary);
-                padding-bottom: 10px;
-                margin-top: 30px;
-                font-size: 1.2em;
-            }
-            .card {
-                background: var(--card-bg);
-                border: 1px solid var(--border);
+            .container {
+                background: white;
+                padding: 2rem;
                 border-radius: 8px;
-                padding: 20px;
-                margin-bottom: 20px;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             }
             .form-group {
-                margin-bottom: 15px;
+                margin-bottom: 1.5rem;
             }
             label {
                 display: block;
-                margin-bottom: 5px;
+                margin-bottom: 0.5rem;
                 font-weight: bold;
-                font-size: 0.9em;
-                color: #374151;
+                color: #333;
             }
             input[type="text"],
-            select,
-            textarea {
+            input[type="url"] {
                 width: 100%;
-                padding: 8px;
-                border: 1px solid #cbd5e1;
+                padding: 0.8rem;
+                border: 1px solid #ddd;
                 border-radius: 4px;
                 box-sizing: border-box;
-                font-family: monospace;
+                font-size: 14px;
             }
-            textarea {
-                height: 80px;
-                resize: vertical;
+            input[type="file"] {
+                width: 100%;
             }
             button {
-                background-color: var(--primary);
+                background-color: #007bff;
                 color: white;
                 border: none;
-                padding: 10px 20px;
+                padding: 12px 20px;
                 border-radius: 4px;
                 cursor: pointer;
-                font-size: 14px;
+                font-size: 16px;
+                width: 100%;
                 transition: background 0.2s;
             }
             button:hover {
-                background-color: #047857;
+                background-color: #0056b3;
             }
-            #response-area {
-                background: #0f172a;
-                color: #4ade80;
-                padding: 15px;
+            button:disabled {
+                background-color: #ccc;
+                cursor: not-allowed;
+            }
+            #status {
+                margin-top: 1rem;
+                padding: 1rem;
                 border-radius: 4px;
-                overflow-x: auto;
-                white-space: pre-wrap;
-                font-family: "Menlo", "Monaco", monospace;
-                min-height: 100px;
-                font-size: 0.85em;
+                display: none;
+                word-break: break-all;
             }
-            .badge {
-                display: inline-block;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-size: 0.75em;
-                font-weight: bold;
-                margin-left: 5px;
+            .success {
+                background-color: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
             }
-            .badge-fast {
-                background: #dcfce7;
-                color: #166534;
-                border: 1px solid #86efac;
+            .error {
+                background-color: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+            .hint {
+                font-size: 12px;
+                color: #666;
+                margin-top: 4px;
+                display: block;
             }
         </style>
     </head>
     <body>
-        <h1>⚡ 高性能文件服务器测试</h1>
+        <div class="container">
+            <h2 style="margin-top: 0">文件上传 (二进制流)</h2>
 
-        <div class="card">
             <div class="form-group">
-                <label for="serverUrl">目标服务器地址 (URL)</label>
+                <label for="urlInput">1. 服务器地址 (API URL)</label>
                 <input
-                    type="text"
-                    id="serverUrl"
+                    type="url"
+                    id="urlInput"
                     value="http://localhost:3000/upload"
                     placeholder="例如: http://localhost:3000/upload"
                 />
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>文件上传测试</h2>
-
-            <div class="form-group">
-                <label>上传模式</label>
-                <select id="uploadMode" onchange="toggleHint()">
-                    <option value="raw">
-                        🚀 二进制流 (POST) - 高性能/无Boundary
-                    </option>
-                    <option value="form">
-                        📦 表单模式 (POST) - 传统 Multipart
-                    </option>
-                </select>
-                <div
-                    id="mode-hint"
-                    style="
-                        font-size: 0.85em;
-                        color: #666;
-                        margin-top: 5px;
-                        background: #f1f5f9;
-                        padding: 8px;
-                        border-radius: 4px;
-                    "
-                >
-                    当前模式：直接将文件字节写入 Request
-                    Body。适合大文件传输，服务器无需解析 multipart。
-                </div>
+                <span class="hint">请确保目标服务器允许跨域 (CORS)</span>
             </div>
 
             <div class="form-group">
-                <label>选择文件</label>
+                <label for="fileInput">2. 选择文件</label>
                 <input type="file" id="fileInput" />
             </div>
 
-            <button onclick="uploadFile()">开始上传</button>
-        </div>
+            <div class="form-group">
+                <label for="fileNameInput">3. 自定义文件名 (X-File-Name)</label>
+                <input
+                    type="text"
+                    id="fileNameInput"
+                    placeholder="选择文件后自动填充"
+                />
+                <span class="hint">将放入 HTTP Header: X-File-Name</span>
+            </div>
 
-        <div class="card">
-            <label>服务器响应</label>
-            <div id="response-area">等待操作...</div>
+            <button id="uploadBtn" onclick="uploadFile()">开始上传</button>
+
+            <div id="status"></div>
         </div>
 
         <script>
-            function log(data) {
-                const area = document.getElementById("response-area");
-                const content =
-                    typeof data === "object"
-                        ? JSON.stringify(data, null, 2)
-                        : data;
-                area.textContent =
-                    `[${new Date().toLocaleTimeString()}] ${content}\n\n` +
-                    area.textContent;
-            }
+            const urlInput = document.getElementById("urlInput");
+            const fileInput = document.getElementById("fileInput");
+            const fileNameInput = document.getElementById("fileNameInput");
+            const uploadBtn = document.getElementById("uploadBtn");
+            const statusDiv = document.getElementById("status");
 
-            function toggleHint() {
-                const mode = document.getElementById("uploadMode").value;
-                const hint = document.getElementById("mode-hint");
-                if (mode === "raw") {
-                    hint.textContent =
-                        "当前模式：直接将文件字节写入 Request Body。适合大文件传输，服务器无需解析 multipart。";
+            // 监听文件选择，自动填充文件名输入框
+            fileInput.addEventListener("change", (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    fileNameInput.value = file.name;
                 } else {
-                    hint.textContent =
-                        "当前模式：将文件封装在 multipart/form-data 中。包含 Boundary 分界符，兼容性好但有解析开销。";
+                    fileNameInput.value = "";
                 }
-            }
+            });
 
             async function uploadFile() {
-                const fileInput = document.getElementById("fileInput");
+                // 获取输入值
+                const targetUrl = urlInput.value.trim();
                 const file = fileInput.files[0];
-                const baseUrl = document.getElementById("serverUrl").value;
-                const mode = document.getElementById("uploadMode").value;
+                const customFileName =
+                    fileNameInput.value.trim() || (file ? file.name : "");
 
+                // 基础校验
+                if (!targetUrl) {
+                    showStatus("错误：请输入服务器地址", "error");
+                    return;
+                }
                 if (!file) {
-                    alert("请先选择一个文件！");
+                    showStatus("错误：请先选择一个文件", "error");
                     return;
                 }
 
-                // 1. 处理 URL 查询参数 (filename)
-                const separator = baseUrl.includes("?") ? "&" : "?";
-                // 使用 encodeURIComponent 确保文件名安全传输
-                const uploadUrl = `${baseUrl}${separator}filename=${encodeURIComponent(
-                    file.name
-                )}`;
-
-                log(
-                    `正在上传 (${
-                        mode === "raw" ? "POST 二进制流" : "POST 表单"
-                    })...`
-                );
-                log(`目标: ${uploadUrl}`);
+                // 界面交互状态更新
+                uploadBtn.disabled = true;
+                uploadBtn.innerText = "正在上传...";
+                showStatus("", "");
 
                 try {
-                    let options = {};
+                    // 对文件名进行编码，防止中文导致 Header 格式错误
+                    const safeFileName = encodeURIComponent(customFileName);
 
-                    if (mode === "raw") {
-                        // === 关键逻辑：PUT 二进制流 ===
-                        // Body 直接设置为 file 对象（它是一个 Blob/Binary）
-                        options = {
-                            method: "POST",
-                            headers: {
-                                // 建议设置为 generic binary 或者文件的真实类型
-                                "Content-Type": "application/octet-stream",
-                            },
-                            body: file,
-                        };
+                    console.log(`正在上传到: ${targetUrl}`);
+                    console.log(`文件大小: ${file.size} 字节`);
+
+                    const response = await fetch(targetUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/octet-stream", // 二进制流标识
+                            "X-File-Name": safeFileName, // 您的自定义头
+                            "X-Parent-Id": "0", // 您的自定义头
+                        },
+                        body: file, // 直接发送 File 对象
+                    });
+
+                    const resultText = await response.text();
+
+                    if (response.ok) {
+                        showStatus(
+                            `✅ 上传成功! <br>状态码: ${response.status}<br>响应: ${resultText}`,
+                            "success"
+                        );
                     } else {
-                        // === 传统逻辑：POST FormData ===
-                        const formData = new FormData();
-                        formData.append("file", file);
-                        options = {
-                            method: "POST",
-                            body: formData,
-                        };
+                        showStatus(
+                            `❌ 上传失败! <br>状态码: ${response.status}<br>信息: ${resultText}`,
+                            "error"
+                        );
                     }
-
-                    const response = await fetch(uploadUrl, options);
-                    const result = await parseResponse(response);
-                    log(result);
                 } catch (error) {
-                    log(`上传失败: ${error.message}`);
+                    console.error("Upload Error:", error);
+                    showStatus(
+                        `❌ 网络/请求错误: ${error.message}<br>请检查服务器地址是否正确以及是否允许跨域。`,
+                        "error"
+                    );
+                } finally {
+                    // 恢复按钮状态
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerText = "开始上传";
                 }
             }
 
-            async function parseResponse(response) {
-                const text = await response.text();
-                try {
-                    return JSON.parse(text);
-                } catch (e) {
-                    return `Status: ${response.status}\nBody: ${text}`;
-                }
+            function showStatus(msg, type) {
+                statusDiv.style.display = msg ? "block" : "none";
+                statusDiv.className = type;
+                statusDiv.innerHTML = msg; // 使用 innerHTML 支持换行
             }
         </script>
     </body>
