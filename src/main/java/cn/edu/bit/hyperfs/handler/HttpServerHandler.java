@@ -53,23 +53,30 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             System.out.println(request.method() + " " + request.uri());
             if (request.method().equals(HttpMethod.OPTIONS)) {
                 // 处理预检请求
-                FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK);
-                response.headers().set("Access-Control-Allow-Origin", "*");
-                response.headers().set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-                response.headers().set("Access-Control-Allow-Headers",
-                        "Content-Type, Accept, X-File-Name, X-Parent-Id");
-                context.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+                handleOptionsRequest(context, request);
                 return;
             } else if (request.method().equals(HttpMethod.POST) && request.uri().startsWith("/upload")) {
+                // 处理上传请求
                 handleUploadRequest(context, request);
             } else {
                 sendResponse(context, NOT_FOUND, "{\"error\":\"Not Found\"}");
+                return;
             }
         }
 
         if (message instanceof HttpContent content && uploadSession != null) {
             handleUploadContent(context, content);
         }
+    }
+
+    private void handleOptionsRequest(ChannelHandlerContext context, HttpRequest request) {
+        FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK);
+        response.headers().set("Access-Control-Allow-Origin", "*");
+        response.headers().set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        response.headers().set("Access-Control-Allow-Headers",
+                "Content-Type, Accept, X-File-Name, X-Parent-Id");
+        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
+        context.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
 
     private boolean parseRequestHeaders(ChannelHandlerContext context, HttpRequest request) {
