@@ -20,7 +20,7 @@ public class FileStorageData {
     }
 
     public void setHashValue(String hashValue) {
-        if (hashValue.length() != 64) {
+        if (hashValue != null && hashValue.length() != 64) {
             throw new IllegalArgumentException("Hash value must be 64 characters long");
         }
         this.hashValue = hashValue;
