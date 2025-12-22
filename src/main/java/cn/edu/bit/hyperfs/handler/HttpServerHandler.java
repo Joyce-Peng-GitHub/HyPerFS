@@ -8,6 +8,7 @@ import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import cn.edu.bit.hyperfs.db.FileMetaDao;
 import cn.edu.bit.hyperfs.entity.FileMetaNode;
 import cn.edu.bit.hyperfs.service.FileUploadSession;
 
@@ -28,6 +29,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private File tmpDirectory = new File(DEFAULT_TMP_DIRECTORY);
     private FileUploadSession uploadSession = null;
     private FileMetaNode node = null;
+    private FileMetaDao fileMetaDao = new FileMetaDao();
 
     public HttpServerHandler() {
         super();
@@ -54,7 +56,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK);
                 response.headers().set("Access-Control-Allow-Origin", "*");
                 response.headers().set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-                response.headers().set("Access-Control-Allow-Headers", "Content-Type, Accept");
+                response.headers().set("Access-Control-Allow-Headers",
+                        "Content-Type, Accept, X-File-Name, X-Parent-Id");
                 context.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
                 return;
             } else if (request.method().equals(HttpMethod.POST) && request.uri().startsWith("/upload")) {
@@ -69,7 +72,38 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
+    private boolean parseRequestHeaders(ChannelHandlerContext context, HttpRequest request) {
+        String parentIdString = QueryStringDecoder.decodeComponent(request.headers().get("X-Parent-Id"));
+        if (parentIdString == null) { // 缺少父节点ID，拒绝请求
+            sendResponse(context, BAD_REQUEST, "{\"error\":\"Missing X-Parent-Id header\"}");
+            return false;
+        }
+        long parentId;
+        try {
+            parentId = Long.parseLong(parentIdString);
+        } catch (NumberFormatException exception) { // 父节点ID格式错误，拒绝请求
+            sendResponse(context, BAD_REQUEST, "{\"error\":\"Invalid X-Parent-Id header\"}");
+            return false;
+        }
+
+        String filename = QueryStringDecoder.decodeComponent(request.headers().get("X-File-Name"));
+        if (filename == null) {
+            sendResponse(context, BAD_REQUEST, "{\"error\":\"Missing X-File-Name header\"}");
+            return false;
+        }
+
+        node = new FileMetaNode();
+        node.setParentId(parentId);
+        node.setName(filename);
+        return true;
+    }
+
     private void handleUploadRequest(ChannelHandlerContext context, HttpRequest request) throws Exception {
+        if (!parseRequestHeaders(context, request)) {
+            resetState();
+            return;
+        }
+
         try {
             uploadSession = new FileUploadSession(tmpDirectory);
         } catch (Exception e) {
@@ -78,13 +112,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             resetState();
             return;
         }
-        QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
-        String filename = decoder.parameters().containsKey("filename")
-                ? decoder.parameters().get("filename").getFirst()
-                : DEFAULT_FILENAME;
-        // TODO: 调用数据库获得父节点ID
-        long parentId = 0; // 临时使用根节点ID
-        node = new FileMetaNode(0, parentId, filename, FileMetaNode.NodeType.FILE, null, null);
+
         // 处理 Expect: 100-continue (HTTP 协议规范)
         if (HttpUtil.is100ContinueExpected(request)) {
             context.writeAndFlush(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE));
@@ -105,14 +133,17 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private void handleUploadCompletion(ChannelHandlerContext context) throws Exception {
         try {
             var result = uploadSession.finish(dataDirectory);
-            node.setStorageData(result);
-            String responseJson = "{\"status\":\"success\", \"fileId\":\"" + node.getId() + "\"}";
-            sendResponse(context, OK, responseJson);
+            node.setHashValue(result.getHashValue());
+            node.setSize(result.getFileSize());
+            node.setUploadTime(System.currentTimeMillis()); // 设置上传时间为当前UTC时间
+            fileMetaDao.insertFileMetaNode(node);
+
+            String responseJson = "{\"status\":\"success\"}";
+            sendResponse(context, HttpResponseStatus.OK, responseJson);
             System.out.println("File uploaded successfully: " + node.getName());
-            resetState();
-        } catch (Exception e) {
-            logger.error("Upload failed", e);
-            sendResponse(context, INTERNAL_SERVER_ERROR, "{\"error\":\"Upload failed\"}");
+        } catch (Exception exception) {
+            logger.error("Upload failed", exception);
+            sendResponse(context, HttpResponseStatus.INTERNAL_SERVER_ERROR, "{\"error\":\"Upload failed\"}");
         } finally {
             resetState();
         }
