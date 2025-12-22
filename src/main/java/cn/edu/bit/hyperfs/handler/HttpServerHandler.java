@@ -159,6 +159,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 HTTP_1_1, status,
                 io.netty.buffer.Unpooled.copiedBuffer(content, CharsetUtil.UTF_8));
         response.headers().set(CONTENT_TYPE, "application/json; charset=UTF-8");
+        response.headers().set("Access-Control-Allow-Origin", "*");
         context.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
 
