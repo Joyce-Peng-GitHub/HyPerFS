@@ -67,9 +67,9 @@ public class DatabaseFactory {
 						name TEXT NOT NULL,
 						is_folder INTEGER NOT NULL,
 						hash TEXT,
-						upload_time INTEGER NOT NULL,
-						download_count INTEGER NOT NULL DEFAULT 0,
-						latest_modified_time TEXT NOT NULL,
+						sz INTEGER NOT NULL DEFAULT 0,
+						up_tm INTEGER NOT NULL,
+						down_cnt INTEGER NOT NULL DEFAULT 0,
 						UNIQUE (parent_id, name)
 					) STRICT;
 				""";
