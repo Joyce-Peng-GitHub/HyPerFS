@@ -3,207 +3,435 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>二进制流文件上传工具</title>
+        <title>HyperFS 文件管理客户端</title>
         <style>
             body {
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                    Roboto, sans-serif;
-                padding: 2rem;
-                max-width: 600px;
-                margin: 0 auto;
+                    Roboto, "Helvetica Neue", Arial, sans-serif;
                 background-color: #f5f5f5;
+                padding: 20px;
+                margin: 0;
             }
+
+            /* 配置栏样式 */
+            .config-bar {
+                max-width: 900px;
+                margin: 0 auto 20px auto;
+                background: #343a40;
+                padding: 15px 20px;
+                border-radius: 8px;
+                color: white;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .config-bar label {
+                font-weight: bold;
+                font-size: 14px;
+            }
+            .config-bar input {
+                flex: 1;
+                padding: 8px 12px;
+                border-radius: 4px;
+                border: 1px solid #ced4da;
+                font-size: 14px;
+            }
+            .config-bar button {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 8px 15px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                transition: background 0.2s;
+            }
+            .config-bar button:hover {
+                background-color: #218838;
+            }
+
+            /* 主容器 */
             .container {
+                max-width: 900px;
+                margin: 0 auto;
                 background: white;
-                padding: 2rem;
+                padding: 20px;
                 border-radius: 8px;
                 box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             }
-            .form-group {
-                margin-bottom: 1.5rem;
+
+            /* 顶部工具栏 */
+            .toolbar {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid #eee;
             }
-            label {
-                display: block;
-                margin-bottom: 0.5rem;
+            .path-nav {
+                font-size: 1.1em;
                 font-weight: bold;
                 color: #333;
             }
-            input[type="text"],
-            input[type="url"] {
-                width: 100%;
-                padding: 0.8rem;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                box-sizing: border-box;
-                font-size: 14px;
-            }
-            input[type="file"] {
-                width: 100%;
-            }
-            button {
-                background-color: #007bff;
-                color: white;
+            .btn {
+                padding: 8px 15px;
                 border: none;
-                padding: 12px 20px;
                 border-radius: 4px;
                 cursor: pointer;
-                font-size: 16px;
-                width: 100%;
                 transition: background 0.2s;
+                font-size: 14px;
             }
-            button:hover {
+            .btn-primary {
+                background-color: #007bff;
+                color: white;
+            }
+            .btn-primary:hover {
                 background-color: #0056b3;
             }
-            button:disabled {
+            .btn-secondary {
+                background-color: #6c757d;
+                color: white;
+                margin-right: 10px;
+            }
+            .btn-secondary:disabled {
                 background-color: #ccc;
                 cursor: not-allowed;
             }
-            #status {
-                margin-top: 1rem;
-                padding: 1rem;
-                border-radius: 4px;
+
+            /* 文件列表表格 */
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th,
+            td {
+                text-align: left;
+                padding: 12px;
+                border-bottom: 1px solid #eee;
+            }
+            th {
+                background-color: #fafafa;
+                font-weight: 600;
+                color: #555;
+            }
+            tr:hover {
+                background-color: #f0f8ff;
+                cursor: pointer;
+            }
+
+            /* 图标与样式 */
+            .icon {
+                margin-right: 8px;
+                width: 20px;
+                text-align: center;
+                display: inline-block;
+            }
+            .folder-row {
+                font-weight: 500;
+                color: #0056b3;
+            }
+            .file-row {
+                color: #333;
+            }
+            .empty-tip {
+                text-align: center;
+                color: #999;
+                padding: 20px;
+            }
+
+            /* 上传区域 */
+            #uploadInput {
                 display: none;
-                word-break: break-all;
-            }
-            .success {
-                background-color: #d4edda;
-                color: #155724;
-                border: 1px solid #c3e6cb;
-            }
-            .error {
-                background-color: #f8d7da;
-                color: #721c24;
-                border: 1px solid #f5c6cb;
-            }
-            .hint {
-                font-size: 12px;
-                color: #666;
-                margin-top: 4px;
-                display: block;
             }
         </style>
     </head>
     <body>
+        <div class="config-bar">
+            <label for="serverUrl">服务器地址:</label>
+            <input
+                type="text"
+                id="serverUrl"
+                placeholder="例如 http://localhost:8080"
+                value="http://localhost:8080"
+            />
+            <button onclick="connectToServer()">连接 / 刷新</button>
+        </div>
+
         <div class="container">
-            <h2 style="margin-top: 0">文件上传 (二进制流)</h2>
-
-            <div class="form-group">
-                <label for="urlInput">1. 服务器地址 (API URL)</label>
-                <input
-                    type="url"
-                    id="urlInput"
-                    value="http://localhost:3000/upload"
-                    placeholder="例如: http://localhost:3000/upload"
-                />
-                <span class="hint">请确保目标服务器允许跨域 (CORS)</span>
+            <div class="toolbar">
+                <div>
+                    <button
+                        id="backBtn"
+                        class="btn btn-secondary"
+                        onclick="goBack()"
+                        disabled
+                    >
+                        ← 返回上一级
+                    </button>
+                    <span id="currentPath" class="path-nav"
+                        >当前目录 ID: 0</span
+                    >
+                </div>
+                <div>
+                    <input
+                        type="file"
+                        id="uploadInput"
+                        onchange="handleFileSelect(this)"
+                    />
+                    <button
+                        class="btn btn-primary"
+                        onclick="document.getElementById('uploadInput').click()"
+                    >
+                        + 上传文件
+                    </button>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label for="fileInput">2. 选择文件</label>
-                <input type="file" id="fileInput" />
-            </div>
-
-            <div class="form-group">
-                <label for="fileNameInput">3. 自定义文件名 (X-File-Name)</label>
-                <input
-                    type="text"
-                    id="fileNameInput"
-                    placeholder="选择文件后自动填充"
-                />
-                <span class="hint">将放入 HTTP Header: X-File-Name</span>
-            </div>
-
-            <button id="uploadBtn" onclick="uploadFile()">开始上传</button>
-
-            <div id="status"></div>
+            <table id="fileTable">
+                <thead>
+                    <tr>
+                        <th width="50%">名称</th>
+                        <th width="15%">大小</th>
+                        <th width="25%">上传时间</th>
+                        <th width="10%">下载量</th>
+                    </tr>
+                </thead>
+                <tbody id="fileListBody">
+                    <tr>
+                        <td colspan="4" class="empty-tip">
+                            请先点击上方“连接”按钮加载数据
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
         <script>
-            const urlInput = document.getElementById("urlInput");
-            const fileInput = document.getElementById("fileInput");
-            const fileNameInput = document.getElementById("fileNameInput");
-            const uploadBtn = document.getElementById("uploadBtn");
-            const statusDiv = document.getElementById("status");
+            // 全局变量
+            let apiBaseUrl = "http://localhost:8080";
+            let currentParentId = 0;
+            let pathHistory = [];
 
-            // 监听文件选择，自动填充文件名输入框
-            fileInput.addEventListener("change", (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    fileNameInput.value = file.name;
-                } else {
-                    fileNameInput.value = "";
+            // 初始化：从 LocalStorage 读取上次使用的地址
+            document.addEventListener("DOMContentLoaded", () => {
+                const savedUrl = localStorage.getItem("hyperfs_server_url");
+                if (savedUrl) {
+                    document.getElementById("serverUrl").value = savedUrl;
+                    apiBaseUrl = savedUrl;
                 }
+                // 自动尝试加载一次
+                connectToServer();
             });
 
-            async function uploadFile() {
-                // 获取输入值
-                const targetUrl = urlInput.value.trim();
-                const file = fileInput.files[0];
-                const customFileName =
-                    fileNameInput.value.trim() || (file ? file.name : "");
-
-                // 基础校验
-                if (!targetUrl) {
-                    showStatus("错误：请输入服务器地址", "error");
-                    return;
-                }
-                if (!file) {
-                    showStatus("错误：请先选择一个文件", "error");
+            /**
+             * 连接服务器并重置视图
+             */
+            function connectToServer() {
+                const inputUrl = document
+                    .getElementById("serverUrl")
+                    .value.trim();
+                if (!inputUrl) {
+                    alert("请输入服务器地址");
                     return;
                 }
 
-                // 界面交互状态更新
-                uploadBtn.disabled = true;
-                uploadBtn.innerText = "正在上传...";
-                showStatus("", "");
+                // 去除末尾斜杠
+                apiBaseUrl = inputUrl.endsWith("/")
+                    ? inputUrl.slice(0, -1)
+                    : inputUrl;
+
+                // 保存到本地存储
+                localStorage.setItem("hyperfs_server_url", apiBaseUrl);
+
+                // 重置状态
+                currentParentId = 0;
+                pathHistory = [];
+                updateUI();
+
+                // 加载根目录
+                loadFileList(0);
+            }
+
+            /**
+             * 加载文件列表
+             */
+            async function loadFileList(parentId) {
+                const tbody = document.getElementById("fileListBody");
+                tbody.innerHTML =
+                    '<tr><td colspan="4" class="empty-tip">正在加载...</td></tr>';
 
                 try {
-                    // 对文件名进行编码，防止中文导致 Header 格式错误
-                    const safeFileName = encodeURIComponent(customFileName);
-
-                    console.log(`正在上传到: ${targetUrl}`);
-                    console.log(`文件大小: ${file.size} 字节`);
-
-                    const response = await fetch(targetUrl, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/octet-stream", // 二进制流标识
-                            "X-File-Name": safeFileName, // 您的自定义头
-                            "X-Parent-Id": "0", // 您的自定义头
-                        },
-                        body: file, // 直接发送 File 对象
-                    });
-
-                    const resultText = await response.text();
-
-                    if (response.ok) {
-                        showStatus(
-                            `✅ 上传成功! <br>状态码: ${response.status}<br>响应: ${resultText}`,
-                            "success"
-                        );
-                    } else {
-                        showStatus(
-                            `❌ 上传失败! <br>状态码: ${response.status}<br>信息: ${resultText}`,
-                            "error"
-                        );
-                    }
-                } catch (error) {
-                    console.error("Upload Error:", error);
-                    showStatus(
-                        `❌ 网络/请求错误: ${error.message}<br>请检查服务器地址是否正确以及是否允许跨域。`,
-                        "error"
+                    const response = await fetch(
+                        `${apiBaseUrl}/list?parentId=${parentId}`
                     );
-                } finally {
-                    // 恢复按钮状态
-                    uploadBtn.disabled = false;
-                    uploadBtn.innerText = "开始上传";
+                    if (!response.ok)
+                        throw new Error(`HTTP 错误: ${response.status}`);
+
+                    const data = await response.json();
+                    renderTable(data.nodes);
+
+                    // 更新当前 ID 状态
+                    currentParentId = parentId;
+                    updateUI();
+                } catch (error) {
+                    console.error(error);
+                    tbody.innerHTML = `<tr><td colspan="4" class="empty-tip" style="color:red">加载失败: ${error.message}<br>请检查服务器地址是否正确</td></tr>`;
                 }
             }
 
-            function showStatus(msg, type) {
-                statusDiv.style.display = msg ? "block" : "none";
-                statusDiv.className = type;
-                statusDiv.innerHTML = msg; // 使用 innerHTML 支持换行
+            /**
+             * 渲染表格
+             */
+            function renderTable(nodes) {
+                const tbody = document.getElementById("fileListBody");
+                tbody.innerHTML = "";
+
+                if (!nodes || nodes.length === 0) {
+                    tbody.innerHTML =
+                        '<tr><td colspan="4" class="empty-tip">此目录为空</td></tr>';
+                    return;
+                }
+
+                // 排序：文件夹在前，文件在后
+                nodes.sort(
+                    (a, b) =>
+                        (b.nodeType === true ? 1 : 0) -
+                        (a.nodeType === true ? 1 : 0)
+                );
+
+                nodes.forEach((node) => {
+                    const tr = document.createElement("tr");
+                    const isFolder = node.nodeType === true;
+
+                    tr.className = isFolder ? "folder-row" : "file-row";
+
+                    if (isFolder) {
+                        tr.ondblclick = () => enterFolder(node.id);
+                    } else {
+                        tr.ondblclick = () =>
+                            alert(`下载功能暂未实现 (File ID: ${node.id})`);
+                    }
+
+                    const icon = isFolder ? "📁" : "📄";
+                    const sizeStr = isFolder ? "-" : formatBytes(node.size);
+
+                    // 简单的时间格式化
+                    let dateStr = "-";
+                    if (node.uploadTime) {
+                        dateStr = new Date(node.uploadTime).toLocaleString();
+                    }
+
+                    tr.innerHTML = `
+                <td><span class="icon">${icon}</span>${escapeHtml(
+                        node.name
+                    )}</td>
+                <td>${sizeStr}</td>
+                <td>${dateStr}</td>
+                <td>${node.downloadCount || 0}</td>
+            `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            /**
+             * 进入文件夹
+             */
+            function enterFolder(folderId) {
+                pathHistory.push(currentParentId);
+                loadFileList(folderId);
+            }
+
+            /**
+             * 返回上一级
+             */
+            function goBack() {
+                if (pathHistory.length > 0) {
+                    const prevId = pathHistory.pop();
+                    loadFileList(prevId);
+                }
+            }
+
+            /**
+             * 处理文件上传
+             */
+            async function handleFileSelect(input) {
+                if (input.files.length === 0) return;
+
+                const file = input.files[0];
+                const fileName = file.name;
+
+                // 简单的 UI 反馈
+                const originalBtnText =
+                    document.querySelector(".btn-primary").innerText;
+                document.querySelector(".btn-primary").innerText = "上传中...";
+                document.querySelector(".btn-primary").disabled = true;
+
+                try {
+                    const encodedFileName = encodeURIComponent(fileName);
+
+                    const response = await fetch(`${apiBaseUrl}/upload`, {
+                        method: "POST",
+                        headers: {
+                            "X-Parent-Id": currentParentId.toString(),
+                            "X-File-Name": encodedFileName,
+                            "Content-Type": "application/octet-stream",
+                        },
+                        body: file,
+                    });
+
+                    if (response.ok) {
+                        // 上传成功后重新加载当前列表
+                        await loadFileList(currentParentId);
+                        alert("上传成功！");
+                    } else {
+                        const errText = await response.text();
+                        alert("上传失败: " + errText);
+                    }
+                } catch (error) {
+                    console.error(error);
+                    alert("上传出错: " + error.message);
+                } finally {
+                    input.value = "";
+                    document.querySelector(".btn-primary").innerText =
+                        originalBtnText;
+                    document.querySelector(".btn-primary").disabled = false;
+                }
+            }
+
+            /**
+             * UI 辅助函数
+             */
+            function updateUI() {
+                document.getElementById(
+                    "currentPath"
+                ).innerText = `当前目录 ID: ${currentParentId}`;
+                document.getElementById("backBtn").disabled =
+                    pathHistory.length === 0;
+            }
+
+            function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0) return "0 B";
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ["B", "KB", "MB", "GB", "TB"];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return (
+                    parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) +
+                    " " +
+                    sizes[i]
+                );
+            }
+
+            function escapeHtml(text) {
+                if (!text) return text;
+                return text
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
             }
         </script>
     </body>

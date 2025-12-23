@@ -58,6 +58,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             } else if (request.method().equals(HttpMethod.POST) && request.uri().startsWith("/upload")) {
                 // 处理上传请求
                 handleUploadRequest(context, request);
+            } else if (request.method().equals(HttpMethod.GET) && request.uri().startsWith("/list")) {
+                // 处理列表请求
+                handleListRequest(context, request);
             } else {
                 sendResponse(context, NOT_FOUND, "{\"error\":\"Not Found\"}");
                 return;
@@ -154,6 +157,38 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         } finally {
             resetState();
         }
+    }
+
+    private void handleListRequest(ChannelHandlerContext context, HttpRequest request) {
+        QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
+        String parentIdString = decoder.parameters().getOrDefault("parentId", java.util.List.of("0")).get(0);
+        long parentId;
+        try {
+            parentId = Long.parseLong(parentIdString);
+        } catch (NumberFormatException exception) {
+            sendResponse(context, BAD_REQUEST, "{\"error\":\"Invalid parentId parameter\"}");
+            return;
+        }
+
+        var nodeList = fileMetaDao.getByParentId(parentId);
+        var responseJsonStringBuilder = new StringBuilder("{\"nodes\":[");
+        for (int i = 0; i < nodeList.size(); ++i) {
+            if (i > 0) {
+                responseJsonStringBuilder.append(",");
+            }
+            var node = nodeList.get(i);
+            responseJsonStringBuilder.append("{")
+                    .append("\"id\":").append(node.getId()).append(",")
+                    .append("\"name\":\"").append(node.getName()).append("\",")
+                    .append("\"nodeType\":").append(node.getNodeType()).append(",")
+                    .append("\"hashValue\":\"").append(node.getNodeType() ? "" : node.getHashValue()).append("\",")
+                    .append("\"size\":").append(node.getSize()).append(",")
+                    .append("\"uploadTime\":").append(node.getUploadTime()).append(",")
+                    .append("\"downloadCount\":").append(node.getDownloadCount())
+                    .append("}");
+        }
+        responseJsonStringBuilder.append("]}");
+        sendResponse(context, OK, responseJsonStringBuilder.toString());
     }
 
     private void resetState() {
