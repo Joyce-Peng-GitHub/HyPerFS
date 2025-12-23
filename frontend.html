@@ -3,104 +3,80 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>HyperFS 文件管理客户端</title>
+        <title>HyperFS 文件管理器</title>
         <style>
+            :root {
+                --primary-color: #007bff;
+                --bg-color: #f8f9fa;
+                --border-color: #dee2e6;
+            }
             body {
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
                     Roboto, "Helvetica Neue", Arial, sans-serif;
-                background-color: #f5f5f5;
-                padding: 20px;
                 margin: 0;
+                padding: 20px;
+                background-color: var(--bg-color);
+                color: #333;
             }
-
-            /* 配置栏样式 */
-            .config-bar {
-                max-width: 900px;
-                margin: 0 auto 20px auto;
-                background: #343a40;
-                padding: 15px 20px;
-                border-radius: 8px;
-                color: white;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            }
-            .config-bar label {
-                font-weight: bold;
-                font-size: 14px;
-            }
-            .config-bar input {
-                flex: 1;
-                padding: 8px 12px;
-                border-radius: 4px;
-                border: 1px solid #ced4da;
-                font-size: 14px;
-            }
-            .config-bar button {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 8px 15px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-weight: bold;
-                transition: background 0.2s;
-            }
-            .config-bar button:hover {
-                background-color: #218838;
-            }
-
-            /* 主容器 */
             .container {
-                max-width: 900px;
+                max-width: 1000px;
                 margin: 0 auto;
                 background: white;
                 padding: 20px;
                 border-radius: 8px;
                 box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             }
-
-            /* 顶部工具栏 */
+            /* 顶部配置栏 */
+            .config-bar {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 20px;
+                padding-bottom: 20px;
+                border-bottom: 1px solid var(--border-color);
+            }
+            input[type="text"] {
+                padding: 8px;
+                border: 1px solid var(--border-color);
+                border-radius: 4px;
+                flex-grow: 1;
+            }
+            /* 操作栏 */
             .toolbar {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 20px;
-                padding-bottom: 10px;
-                border-bottom: 1px solid #eee;
+                margin-bottom: 15px;
             }
-            .path-nav {
+            .breadcrumb {
                 font-size: 1.1em;
-                font-weight: bold;
-                color: #333;
+                color: #666;
             }
-            .btn {
-                padding: 8px 15px;
+            .breadcrumb span {
+                cursor: pointer;
+                color: var(--primary-color);
+                text-decoration: underline;
+            }
+            .breadcrumb span:last-child {
+                color: #333;
+                text-decoration: none;
+                cursor: default;
+            }
+            button {
+                padding: 8px 16px;
+                background-color: var(--primary-color);
+                color: white;
                 border: none;
                 border-radius: 4px;
                 cursor: pointer;
                 transition: background 0.2s;
-                font-size: 14px;
             }
-            .btn-primary {
-                background-color: #007bff;
-                color: white;
-            }
-            .btn-primary:hover {
+            button:hover {
                 background-color: #0056b3;
             }
-            .btn-secondary {
+            button.secondary {
                 background-color: #6c757d;
-                color: white;
-                margin-right: 10px;
             }
-            .btn-secondary:disabled {
-                background-color: #ccc;
-                cursor: not-allowed;
-            }
-
-            /* 文件列表表格 */
+            /* 文件列表 */
             table {
                 width: 100%;
                 border-collapse: collapse;
@@ -109,330 +85,308 @@
             td {
                 text-align: left;
                 padding: 12px;
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid var(--border-color);
             }
             th {
-                background-color: #fafafa;
+                background-color: #f1f3f5;
                 font-weight: 600;
-                color: #555;
             }
-            tr:hover {
-                background-color: #f0f8ff;
+            tr.item-row:hover {
+                background-color: #f8f9fa;
                 cursor: pointer;
             }
-
-            /* 图标与样式 */
             .icon {
                 margin-right: 8px;
-                width: 20px;
-                text-align: center;
-                display: inline-block;
             }
-            .folder-row {
-                font-weight: 500;
-                color: #0056b3;
+            .folder-name {
+                font-weight: bold;
+                color: var(--primary-color);
             }
-            .file-row {
-                color: #333;
-            }
-            .empty-tip {
-                text-align: center;
-                color: #999;
-                padding: 20px;
-            }
-
-            /* 上传区域 */
-            #uploadInput {
+            /* 模态框 */
+            .modal {
                 display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                justify-content: center;
+                align-items: center;
+            }
+            .modal-content {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                width: 300px;
+            }
+            .modal-actions {
+                margin-top: 15px;
+                text-align: right;
             }
         </style>
     </head>
     <body>
-        <div class="config-bar">
-            <label for="serverUrl">服务器地址:</label>
-            <input
-                type="text"
-                id="serverUrl"
-                placeholder="例如 http://localhost:8080"
-                value="http://localhost:8080"
-            />
-            <button onclick="connectToServer()">连接 / 刷新</button>
-        </div>
-
         <div class="container">
+            <div class="config-bar">
+                <input
+                    type="text"
+                    id="serverUrl"
+                    placeholder="服务器地址 (例如 http://127.0.0.1:8080)"
+                    value="http://127.0.0.1:8080"
+                />
+                <button onclick="refreshList()">连接 / 刷新</button>
+            </div>
+
             <div class="toolbar">
-                <div>
-                    <button
-                        id="backBtn"
-                        class="btn btn-secondary"
-                        onclick="goBack()"
-                        disabled
-                    >
-                        ← 返回上一级
-                    </button>
-                    <span id="currentPath" class="path-nav"
-                        >当前目录 ID: 0</span
-                    >
+                <div class="breadcrumb" id="breadcrumb">
+                    <span>Root</span>
                 </div>
-                <div>
+                <div style="display: flex; gap: 10px">
+                    <button class="secondary" onclick="showMkdirModal()">
+                        + 新建文件夹
+                    </button>
+                    <button
+                        onclick="document.getElementById('fileInput').click()"
+                    >
+                        ↑ 上传文件
+                    </button>
                     <input
                         type="file"
-                        id="uploadInput"
-                        onchange="handleFileSelect(this)"
+                        id="fileInput"
+                        style="display: none"
+                        onchange="handleUpload(this.files)"
                     />
-                    <button
-                        class="btn btn-primary"
-                        onclick="document.getElementById('uploadInput').click()"
-                    >
-                        + 上传文件
-                    </button>
                 </div>
             </div>
 
-            <table id="fileTable">
+            <table>
                 <thead>
                     <tr>
                         <th width="50%">名称</th>
+                        <th width="15%">类型</th>
                         <th width="15%">大小</th>
-                        <th width="25%">上传时间</th>
-                        <th width="10%">下载量</th>
+                        <th width="20%">上传时间</th>
                     </tr>
                 </thead>
-                <tbody id="fileListBody">
-                    <tr>
-                        <td colspan="4" class="empty-tip">
-                            请先点击上方“连接”按钮加载数据
-                        </td>
-                    </tr>
-                </tbody>
+                <tbody id="fileListBody"></tbody>
             </table>
         </div>
 
+        <div id="mkdirModal" class="modal">
+            <div class="modal-content">
+                <h3>新建文件夹</h3>
+                <input
+                    type="text"
+                    id="newDirName"
+                    placeholder="文件夹名称"
+                    style="width: 100%; box-sizing: border-box"
+                />
+                <div class="modal-actions">
+                    <button class="secondary" onclick="closeMkdirModal()">
+                        取消
+                    </button>
+                    <button onclick="executeMkdir()">确定</button>
+                </div>
+            </div>
+        </div>
+
         <script>
-            // 全局变量
-            let apiBaseUrl = "http://localhost:8080";
-            let currentParentId = 0;
-            let pathHistory = [];
+            // 状态管理
+            let currentPathStack = [{ id: 0, name: "Root" }]; // 用于面包屑导航
 
-            // 初始化：从 LocalStorage 读取上次使用的地址
-            document.addEventListener("DOMContentLoaded", () => {
-                const savedUrl = localStorage.getItem("hyperfs_server_url");
-                if (savedUrl) {
-                    document.getElementById("serverUrl").value = savedUrl;
-                    apiBaseUrl = savedUrl;
-                }
-                // 自动尝试加载一次
-                connectToServer();
-            });
-
-            /**
-             * 连接服务器并重置视图
-             */
-            function connectToServer() {
-                const inputUrl = document
-                    .getElementById("serverUrl")
-                    .value.trim();
-                if (!inputUrl) {
-                    alert("请输入服务器地址");
-                    return;
-                }
-
-                // 去除末尾斜杠
-                apiBaseUrl = inputUrl.endsWith("/")
-                    ? inputUrl.slice(0, -1)
-                    : inputUrl;
-
-                // 保存到本地存储
-                localStorage.setItem("hyperfs_server_url", apiBaseUrl);
-
-                // 重置状态
-                currentParentId = 0;
-                pathHistory = [];
-                updateUI();
-
-                // 加载根目录
-                loadFileList(0);
+            // 获取当前父ID
+            function getCurrentParentId() {
+                return currentPathStack[currentPathStack.length - 1].id;
             }
 
-            /**
-             * 加载文件列表
-             */
-            async function loadFileList(parentId) {
-                const tbody = document.getElementById("fileListBody");
-                tbody.innerHTML =
-                    '<tr><td colspan="4" class="empty-tip">正在加载...</td></tr>';
-
-                try {
-                    const response = await fetch(
-                        `${apiBaseUrl}/list?parentId=${parentId}`
-                    );
-                    if (!response.ok)
-                        throw new Error(`HTTP 错误: ${response.status}`);
-
-                    const data = await response.json();
-                    renderTable(data.nodes);
-
-                    // 更新当前 ID 状态
-                    currentParentId = parentId;
-                    updateUI();
-                } catch (error) {
-                    console.error(error);
-                    tbody.innerHTML = `<tr><td colspan="4" class="empty-tip" style="color:red">加载失败: ${error.message}<br>请检查服务器地址是否正确</td></tr>`;
-                }
+            // 获取服务器基础地址
+            function getBaseUrl() {
+                let url = document.getElementById("serverUrl").value.trim();
+                return url.endsWith("/") ? url.slice(0, -1) : url;
             }
 
-            /**
-             * 渲染表格
-             */
-            function renderTable(nodes) {
-                const tbody = document.getElementById("fileListBody");
-                tbody.innerHTML = "";
-
-                if (!nodes || nodes.length === 0) {
-                    tbody.innerHTML =
-                        '<tr><td colspan="4" class="empty-tip">此目录为空</td></tr>';
-                    return;
-                }
-
-                // 排序：文件夹在前，文件在后
-                nodes.sort(
-                    (a, b) =>
-                        (b.nodeType === true ? 1 : 0) -
-                        (a.nodeType === true ? 1 : 0)
-                );
-
-                nodes.forEach((node) => {
-                    const tr = document.createElement("tr");
-                    const isFolder = node.nodeType === true;
-
-                    tr.className = isFolder ? "folder-row" : "file-row";
-
-                    if (isFolder) {
-                        tr.ondblclick = () => enterFolder(node.id);
-                    } else {
-                        tr.ondblclick = () =>
-                            alert(`下载功能暂未实现 (File ID: ${node.id})`);
-                    }
-
-                    const icon = isFolder ? "📁" : "📄";
-                    const sizeStr = isFolder ? "-" : formatBytes(node.size);
-
-                    // 简单的时间格式化
-                    let dateStr = "-";
-                    if (node.uploadTime) {
-                        dateStr = new Date(node.uploadTime).toLocaleString();
-                    }
-
-                    tr.innerHTML = `
-                <td><span class="icon">${icon}</span>${escapeHtml(
-                        node.name
-                    )}</td>
-                <td>${sizeStr}</td>
-                <td>${dateStr}</td>
-                <td>${node.downloadCount || 0}</td>
-            `;
-                    tbody.appendChild(tr);
-                });
-            }
-
-            /**
-             * 进入文件夹
-             */
-            function enterFolder(folderId) {
-                pathHistory.push(currentParentId);
-                loadFileList(folderId);
-            }
-
-            /**
-             * 返回上一级
-             */
-            function goBack() {
-                if (pathHistory.length > 0) {
-                    const prevId = pathHistory.pop();
-                    loadFileList(prevId);
-                }
-            }
-
-            /**
-             * 处理文件上传
-             */
-            async function handleFileSelect(input) {
-                if (input.files.length === 0) return;
-
-                const file = input.files[0];
-                const fileName = file.name;
-
-                // 简单的 UI 反馈
-                const originalBtnText =
-                    document.querySelector(".btn-primary").innerText;
-                document.querySelector(".btn-primary").innerText = "上传中...";
-                document.querySelector(".btn-primary").disabled = true;
-
-                try {
-                    const encodedFileName = encodeURIComponent(fileName);
-
-                    const response = await fetch(`${apiBaseUrl}/upload`, {
-                        method: "POST",
-                        headers: {
-                            "X-Parent-Id": currentParentId.toString(),
-                            "X-File-Name": encodedFileName,
-                            "Content-Type": "application/octet-stream",
-                        },
-                        body: file,
-                    });
-
-                    if (response.ok) {
-                        // 上传成功后重新加载当前列表
-                        await loadFileList(currentParentId);
-                        alert("上传成功！");
-                    } else {
-                        const errText = await response.text();
-                        alert("上传失败: " + errText);
-                    }
-                } catch (error) {
-                    console.error(error);
-                    alert("上传出错: " + error.message);
-                } finally {
-                    input.value = "";
-                    document.querySelector(".btn-primary").innerText =
-                        originalBtnText;
-                    document.querySelector(".btn-primary").disabled = false;
-                }
-            }
-
-            /**
-             * UI 辅助函数
-             */
-            function updateUI() {
-                document.getElementById(
-                    "currentPath"
-                ).innerText = `当前目录 ID: ${currentParentId}`;
-                document.getElementById("backBtn").disabled =
-                    pathHistory.length === 0;
-            }
-
-            function formatBytes(bytes, decimals = 2) {
+            // 格式化文件大小
+            function formatSize(bytes) {
                 if (bytes === 0) return "0 B";
                 const k = 1024;
-                const dm = decimals < 0 ? 0 : decimals;
-                const sizes = ["B", "KB", "MB", "GB", "TB"];
+                const sizes = ["B", "KB", "MB", "GB"];
                 const i = Math.floor(Math.log(bytes) / Math.log(k));
                 return (
-                    parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) +
+                    parseFloat((bytes / Math.pow(k, i)).toFixed(2)) +
                     " " +
                     sizes[i]
                 );
             }
 
-            function escapeHtml(text) {
-                if (!text) return text;
-                return text
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;");
+            // 格式化时间
+            function formatTime(timestamp) {
+                if (!timestamp) return "-";
+                return new Date(timestamp).toLocaleString();
             }
+
+            // 渲染面包屑
+            function renderBreadcrumb() {
+                const container = document.getElementById("breadcrumb");
+                container.innerHTML = "";
+                currentPathStack.forEach((item, index) => {
+                    const span = document.createElement("span");
+                    span.textContent = item.name;
+                    if (index < currentPathStack.length - 1) {
+                        span.onclick = () => {
+                            // 回退到点击的层级
+                            currentPathStack = currentPathStack.slice(
+                                0,
+                                index + 1
+                            );
+                            refreshList();
+                        };
+                        const divider = document.createTextNode(" > ");
+                        container.appendChild(span);
+                        container.appendChild(divider);
+                    } else {
+                        container.appendChild(span);
+                    }
+                });
+            }
+
+            // 1. 获取列表 (List)
+            async function refreshList() {
+                const parentId = getCurrentParentId();
+                renderBreadcrumb();
+                const tbody = document.getElementById("fileListBody");
+                tbody.innerHTML =
+                    '<tr><td colspan="4" style="text-align:center">加载中...</td></tr>';
+
+                try {
+                    const response = await fetch(
+                        `${getBaseUrl()}/list?parentId=${parentId}`,
+                        {
+                            method: "GET",
+                        }
+                    );
+
+                    if (!response.ok) throw new Error("网络请求失败");
+
+                    const data = await response.json();
+
+                    tbody.innerHTML = "";
+                    if (!data.nodes || data.nodes.length === 0) {
+                        tbody.innerHTML =
+                            '<tr><td colspan="4" style="text-align:center; color: #999;">空目录</td></tr>';
+                        return;
+                    }
+
+                    data.nodes.forEach((node) => {
+                        const tr = document.createElement("tr");
+                        tr.className = "item-row";
+                        const isDir = node.nodeType === true; // true 为文件夹
+
+                        // 双击事件
+                        tr.ondblclick = () => {
+                            if (isDir) {
+                                currentPathStack.push({
+                                    id: node.id,
+                                    name: node.name,
+                                });
+                                refreshList();
+                            }
+                        };
+
+                        tr.innerHTML = `
+                    <td>
+                        <span class="icon">${isDir ? "📁" : "📄"}</span>
+                        <span class="${isDir ? "folder-name" : ""}">${
+                            node.name
+                        }</span>
+                    </td>
+                    <td>${isDir ? "目录" : "文件"}</td>
+                    <td>${isDir ? "-" : formatSize(node.size)}</td>
+                    <td>${formatTime(node.uploadTime)}</td>
+                `;
+                        tbody.appendChild(tr);
+                    });
+                } catch (error) {
+                    console.error(error);
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: red;">加载失败: ${error.message}</td></tr>`;
+                }
+            }
+
+            // 2. 上传文件 (Upload)
+            async function handleUpload(files) {
+                if (files.length === 0) return;
+                const file = files[0];
+                const parentId = getCurrentParentId();
+
+                // 这里的关键是 header，匹配你的 Java parseRequestHeaders
+                // 不需要 FormData，直接发送 file 字节流，因为你的 handleUploadContent 直接读 chunk
+                try {
+                    // 对中文文件名进行 Encode，对应 Java 的 QueryStringDecoder.decodeComponent
+                    const encodedName = encodeURIComponent(file.name);
+
+                    const response = await fetch(`${getBaseUrl()}/upload`, {
+                        method: "POST",
+                        headers: {
+                            "X-Parent-Id": parentId,
+                            "X-Name": encodedName,
+                            "Content-Type": "application/octet-stream", // 标识二进制流
+                        },
+                        body: file,
+                    });
+
+                    if (response.ok) {
+                        alert("上传成功");
+                        refreshList();
+                    } else {
+                        const err = await response.text();
+                        alert("上传失败: " + err);
+                    }
+                } catch (e) {
+                    alert("上传出错: " + e.message);
+                }
+                // 清空 input 允许重复上传同名文件
+                document.getElementById("fileInput").value = "";
+            }
+
+            // 3. 创建文件夹 (Mkdir)
+            function showMkdirModal() {
+                document.getElementById("mkdirModal").style.display = "flex";
+                document.getElementById("newDirName").focus();
+            }
+
+            function closeMkdirModal() {
+                document.getElementById("mkdirModal").style.display = "none";
+                document.getElementById("newDirName").value = "";
+            }
+
+            async function executeMkdir() {
+                const name = document.getElementById("newDirName").value.trim();
+                if (!name) return;
+                const parentId = getCurrentParentId();
+
+                try {
+                    const encodedName = encodeURIComponent(name);
+                    const response = await fetch(`${getBaseUrl()}/mkdir`, {
+                        method: "POST",
+                        headers: {
+                            "X-Parent-Id": parentId,
+                            "X-Name": encodedName,
+                        },
+                    });
+
+                    if (response.ok) {
+                        closeMkdirModal();
+                        refreshList();
+                    } else {
+                        alert("创建失败");
+                    }
+                } catch (e) {
+                    alert("错误: " + e.message);
+                }
+            }
+
+            // 初始化加载
+            window.onload = refreshList;
         </script>
     </body>
 </html>

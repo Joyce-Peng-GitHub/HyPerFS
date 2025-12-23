@@ -58,6 +58,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             } else if (request.method().equals(HttpMethod.POST) && request.uri().startsWith("/upload")) {
                 // 处理上传请求
                 handleUploadRequest(context, request);
+            } else if (request.method().equals(HttpMethod.POST) && request.uri().startsWith("/mkdir")) {
+                // 处理创建目录请求
+                handleMkdirRequest(context, request);
             } else if (request.method().equals(HttpMethod.GET) && request.uri().startsWith("/list")) {
                 // 处理列表请求
                 handleListRequest(context, request);
@@ -77,7 +80,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         response.headers().set("Access-Control-Allow-Origin", "*");
         response.headers().set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
         response.headers().set("Access-Control-Allow-Headers",
-                "Content-Type, Accept, X-File-Name, X-Parent-Id");
+                "Content-Type, Accept, X-Name, X-Parent-Id");
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
         context.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }
@@ -96,9 +99,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             return false;
         }
 
-        String filename = QueryStringDecoder.decodeComponent(request.headers().get("X-File-Name"));
+        String filename = QueryStringDecoder.decodeComponent(request.headers().get("X-Name"));
         if (filename == null) {
-            sendResponse(context, BAD_REQUEST, "{\"error\":\"Missing X-File-Name header\"}");
+            sendResponse(context, BAD_REQUEST, "{\"error\":\"Missing X-Name header\"}");
             return false;
         }
 
@@ -189,6 +192,24 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
         responseJsonStringBuilder.append("]}");
         sendResponse(context, OK, responseJsonStringBuilder.toString());
+    }
+
+    private void handleMkdirRequest(ChannelHandlerContext context, HttpRequest request) {
+        if (!parseRequestHeaders(context, request)) {
+            return;
+        }
+        node.setNodeType(true); // 设置为文件夹
+        node.setUploadTime(System.currentTimeMillis());
+
+        try {
+            fileMetaDao.insertFileMetaNode(node);
+            String responseJson = "{\"status\":\"success\"}";
+            sendResponse(context, OK, responseJson);
+        } catch (Exception exception) {
+            logger.error("Failed to create directory", exception);
+            sendResponse(context, HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "{\"error\":\"Failed to create directory\"}");
+        }
     }
 
     private void resetState() {
