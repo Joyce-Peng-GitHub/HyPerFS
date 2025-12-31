@@ -1,8 +1,6 @@
 package cn.edu.bit.hyperfs.db;
 
-import java.sql.Statement;
 import java.io.File;
-import java.sql.Connection;
 import java.sql.SQLException;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -52,5 +50,42 @@ public class DatabaseFactory {
 	}
 
 	private void initTables() {
+		try (var connection = dataSource.getConnection();
+				var statement = connection.createStatement()) {
+
+			// 创建 file_storage 表
+			statement.execute("""
+						CREATE TABLE IF NOT EXISTS file_storage (
+							hash TEXT NOT NULL PRIMARY KEY,
+							sz INTEGER NOT NULL,
+							ref_cnt INTEGER NOT NULL DEFAULT 1,
+							created_at TEXT DEFAULT CURRENT_TIMESTAMP
+						) STRICT;
+					""");
+
+			// 创建 file_meta 表
+			statement.execute("""
+						CREATE TABLE IF NOT EXISTS file_meta (
+							id INTEGER PRIMARY KEY,
+							parent_id INTEGER NOT NULL DEFAULT 0,
+							name TEXT NOT NULL,
+							is_folder INTEGER NOT NULL,
+							hash TEXT,
+							sz INTEGER DEFAULT 0,
+							up_tm INTEGER NOT NULL,
+							down_cnt INTEGER NOT NULL DEFAULT 0,
+							UNIQUE (parent_id, name)
+						) STRICT;
+					""");
+
+			// 创建索引
+			statement.execute("""
+						CREATE INDEX IF NOT EXISTS idx_parent_id
+						ON file_meta (parent_id);
+					""");
+
+		} catch (SQLException e) {
+			throw new RuntimeException("Failed to initialize database: " + e.getMessage(), e);
+		}
 	}
 }

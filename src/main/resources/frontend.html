@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyPerFS Web Client</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        #file-list { margin-top: 20px; border-collapse: collapse; width: 100%; }
+        #file-list th, #file-list td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        #file-list th { background-color: #f2f2f2; }
+        .folder { color: blue; cursor: pointer; text-decoration: underline; }
+        .actions button { margin-right: 5px; }
+        #upload-area, #controls { margin-bottom: 20px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>HyPerFS Web Client</h1>
+
+    <div id="controls">
+        <button onclick="refreshList()">Refresh</button>
+        <button onclick="goUp()">Up Directory</button>
+        <button onclick="createFolder()">New Folder</button>
+        <span>Current Parent ID: <span id="current-parent-id">0</span></span>
+    </div>
+
+    <div id="upload-area">
+        <h3>Upload File</h3>
+        <input type="file" id="file-input">
+        <button onclick="uploadFile()">Upload</button>
+    </div>
+
+    <table id="file-list">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Upload Time</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Files will be listed here -->
+        </tbody>
+    </table>
+
+    <script>
+        let currentParentId = 0;
+        const parentHistory = [];
+
+        async function refreshList() {
+            try {
+                const response = await fetch(`/list?parentId=${currentParentId}`);
+                if (!response.ok) throw new Error(await response.text());
+                const files = await response.json();
+                renderList(files);
+                document.getElementById('current-parent-id').textContent = currentParentId;
+            } catch (e) {
+                alert('Failed to load list: ' + e.message);
+            }
+        }
+
+        function renderList(files) {
+            const tbody = document.querySelector('#file-list tbody');
+            tbody.innerHTML = '';
+            files.forEach(file => {
+                const tr = document.createElement('tr');
+                
+                const type = file.isFolder ? 'Folder' : 'File';
+                const nameContent = file.isFolder 
+                    ? `<span class="folder" onclick="enterFolder(${file.id})">${file.name}</span>` 
+                    : file.name;
+
+                const date = new Date(file.uploadTime).toLocaleString();
+
+                tr.innerHTML = `
+                    <td>${file.id}</td>
+                    <td>${nameContent}</td>
+                    <td>${type}</td>
+                    <td>${file.size}</td>
+                    <td>${date}</td>
+                    <td class="actions">
+                        ${!file.isFolder ? `<button onclick="downloadFile(${file.id})">Download</button>` : ''}
+                        <button onclick="deleteNode(${file.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function enterFolder(id) {
+            parentHistory.push(currentParentId);
+            currentParentId = id;
+            refreshList();
+        }
+
+        function goUp() {
+            if (parentHistory.length > 0) {
+                currentParentId = parentHistory.pop();
+                refreshList();
+            } else {
+                currentParentId = 0;
+                refreshList();
+            }
+        }
+
+        async function createFolder() {
+            const name = prompt("Enter folder name:");
+            if (!name) return;
+            try {
+                const response = await fetch(`/folder?parentId=${currentParentId}&name=${encodeURIComponent(name)}`, { method: 'POST' });
+                if (!response.ok) throw new Error(await response.text());
+                refreshList();
+            } catch (e) {
+                alert('Failed to create folder: ' + e.message);
+            }
+        }
+
+        async function deleteNode(id) {
+            if (!confirm("Are you sure you want to delete this item?")) return;
+            try {
+                const response = await fetch(`/delete?id=${id}`, { method: 'POST' });
+                if (!response.ok) throw new Error(await response.text());
+                refreshList();
+            } catch (e) {
+                alert('Failed to delete: ' + e.message);
+            }
+        }
+
+        function downloadFile(id) {
+            window.location.href = `/download?id=${id}`;
+        }
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select a file");
+                return;
+            }
+
+            try {
+                // Post directly as binary body
+                const response = await fetch(`/upload?parentId=${currentParentId}&filename=${encodeURIComponent(file.name)}`, {
+                    method: 'POST',
+                    body: file
+                });
+                
+                if (!response.ok) throw new Error(await response.text());
+                alert('Upload successful');
+                fileInput.value = '';
+                refreshList();
+            } catch (e) {
+                alert('Upload failed: ' + e.message);
+            }
+        }
+
+        // Initial load
+        refreshList();
+    </script>
+</body>
+</html>

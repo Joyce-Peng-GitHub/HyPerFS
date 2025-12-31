@@ -11,10 +11,10 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
-public class HyPerFSServer {
+public class HyPerFS {
     private final int port;
 
-    public HyPerFSServer(int port) {
+    public HyPerFS(int port) {
         this.port = port;
     }
 
@@ -49,6 +49,6 @@ public class HyPerFSServer {
 
     public static void main(String[] args) throws Exception {
         int port = 14514;
-        new HyPerFSServer(port).start();
+        new HyPerFS(port).start();
     }
 }
