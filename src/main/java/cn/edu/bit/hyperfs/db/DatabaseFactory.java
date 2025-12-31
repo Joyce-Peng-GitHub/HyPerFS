@@ -52,41 +52,5 @@ public class DatabaseFactory {
 	}
 
 	private void initTables() {
-		String createStorageTable = """
-					CREATE TABLE IF NOT EXISTS file_storage (
-						hash TEXT NOT NULL PRIMARY KEY,
-						sz INTEGER NOT NULL,
-						ref_cnt INTEGER NOT NULL DEFAULT 1,
-						created_at TEXT DEFAULT CURRENT_TIMESTAMP
-					) STRICT;
-				""";
-		String createFileMetaTable = """
-					CREATE TABLE IF NOT EXISTS file_meta (
-						id INTEGER PRIMARY KEY,
-						parent_id INTEGER NOT NULL DEFAULT 0,
-						name TEXT NOT NULL,
-						is_folder INTEGER NOT NULL,
-						hash TEXT,
-						sz INTEGER NOT NULL DEFAULT 0,
-						up_tm INTEGER NOT NULL,
-						down_cnt INTEGER NOT NULL DEFAULT 0,
-						UNIQUE (parent_id, name)
-					) STRICT;
-				""";
-		String createIndexParentId = """
-					CREATE INDEX IF NOT EXISTS idx_parent_id
-					ON file_meta (parent_id);
-				""";
-
-		try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
-			statement.execute(createStorageTable);
-			statement.execute(createFileMetaTable);
-			System.out.println("Tables initialized successfully.");
-
-			statement.execute(createIndexParentId);
-			System.out.println("Indexes initialized successfully.");
-		} catch (SQLException exception) {
-			throw new DataAccessException("Failed to initialize database tables", exception);
-		}
 	}
 }
