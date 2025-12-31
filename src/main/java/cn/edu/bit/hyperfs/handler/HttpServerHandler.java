@@ -6,6 +6,7 @@ import io.netty.handler.codec.http.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import cn.edu.bit.hyperfs.service.FileDownloadResource;
 import cn.edu.bit.hyperfs.service.FileService;
 import cn.edu.bit.hyperfs.service.FileUploadSession;
 import cn.edu.bit.hyperfs.entity.FileMetaEntity;
@@ -119,14 +120,17 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         try {
             // 解析Range头，支持断点续传
             // 简单处理，暂不支持复杂的Range
-            DefaultFileRegion region = fileService.startDownload(id, 0, Long.MAX_VALUE);
+            FileDownloadResource downloadResource = fileService.startDownload(id, 0, Long.MAX_VALUE);
+            DefaultFileRegion region = downloadResource.region();
+            String filename = downloadResource.filename();
+            // URL encode filename to support special characters
+            String encodedFilename = java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
 
             HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
             response.headers().set(HttpHeaderNames.CONTENT_LENGTH, region.count());
             response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
-            // 这里应该设置Content-Disposition，但需要查询文件名，DatabaseService.getFileMeta已经查了一次，这里为了性能或者结构可以优化。
-            // 简单起见，先不设置文件名，或者让startDownload返回更多信息。
-            // 为了可以设置文件名，我们可以在Handler层先查一下Meta。
+            response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION,
+                    "attachment; filename*=UTF-8''" + encodedFilename);
 
             ctx.write(response);
             ctx.writeAndFlush(region, ctx.newProgressivePromise());

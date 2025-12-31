@@ -75,7 +75,7 @@ public class FileService {
         return databaseService.getList(parentId);
     }
 
-    public DefaultFileRegion startDownload(long id, long startRange, long length) throws Exception {
+    public FileDownloadResource startDownload(long id, long startRange, long length) throws Exception {
         FileMetaEntity fileMeta = databaseService.getFileMeta(id);
         if (fileMeta == null || fileMeta.getIsFolder() == 1) {
             throw new IllegalArgumentException("File not found or is a folder");
@@ -97,7 +97,7 @@ public class FileService {
         }
 
         // 使用 DefaultFileRegion 实现零拷贝
-        return new DefaultFileRegion(file, startRange, actualLength);
+        return new FileDownloadResource(new DefaultFileRegion(file, startRange, actualLength), fileMeta.getName());
     }
 
     public void delete(long id) throws Exception {
