@@ -8,7 +8,11 @@ import io.netty.channel.DefaultFileRegion;
 import java.io.File;
 import java.io.IOException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class FileService {
+    private static final Logger logger = LoggerFactory.getLogger(FileService.class);
     private final DatabaseService databaseService = new DatabaseService();
     private final File dataDirectory = new File(HttpServerHandler.DEFAULT_DATA_DIRECTORY);
     private final File tmpDirectory = new File(HttpServerHandler.DEFAULT_TMP_DIRECTORY);
@@ -23,6 +27,7 @@ public class FileService {
     }
 
     public FileUploadSession startUpload() throws Exception {
+        logger.info("Starting upload session");
         return new FileUploadSession(tmpDirectory);
     }
 
@@ -40,6 +45,7 @@ public class FileService {
             } else {
                 // 如果不重复，移动文件
                 File targetFile = new File(dataDirectory, hash);
+                logger.info("Completing upload for file: {}, hash: {}, size: {}", filename, hash, size);
                 try {
                     // 如果目标文件已存在（可能是因为虽然是新节点，但哈希值对应的文件内容已存在），则直接删除临时文件
                     // 这里有一个细微的逻辑：insertFile会检查hash对应的storage是否存在。如果存在，storageDao不会插入。
@@ -75,6 +81,7 @@ public class FileService {
             throw new IllegalArgumentException("File not found or is a folder");
         }
 
+        logger.info("Starting download for file id: {}, hash: {}", id, fileMeta.getHash());
         databaseService.incrementDownloadCount(id);
 
         File file = new File(dataDirectory, fileMeta.getHash());
@@ -94,10 +101,12 @@ public class FileService {
     }
 
     public void delete(long id) throws Exception {
+        logger.info("Deleting node: {}", id);
         databaseService.deleteNode(id);
     }
 
     public long createFolder(long parentId, String name) throws Exception {
+        logger.info("Creating folder: name={}, parentId={}", name, parentId);
         return databaseService.insertFolder(parentId, name);
     }
 }

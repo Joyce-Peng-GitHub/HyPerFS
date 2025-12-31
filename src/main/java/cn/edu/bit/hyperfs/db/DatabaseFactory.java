@@ -6,13 +6,18 @@ import java.sql.SQLException;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DatabaseFactory {
+	private static final Logger logger = LoggerFactory.getLogger(DatabaseFactory.class);
 	private static volatile DatabaseFactory instance;
 	private final HikariDataSource dataSource;
 
 	public static final String DATABASE_PATH = "./db/hyperfs.db";
 
 	private DatabaseFactory() {
+		logger.info("Initializing DatabaseFactory...");
 		ensureDatabaseDirectoryExists();
 
 		var config = new HikariConfig();
@@ -24,6 +29,7 @@ public class DatabaseFactory {
 		dataSource = new HikariDataSource(config);
 
 		initTables();
+		logger.info("Database initialized successfully at {}", DATABASE_PATH);
 	}
 
 	public static DatabaseFactory getInstance() {

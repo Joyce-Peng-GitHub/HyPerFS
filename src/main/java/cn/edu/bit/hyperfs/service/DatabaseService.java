@@ -7,7 +7,11 @@ import cn.edu.bit.hyperfs.entity.FileStorageEntity;
 import java.sql.SQLException;
 import java.util.ArrayList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DatabaseService {
+    private static final Logger logger = LoggerFactory.getLogger(DatabaseService.class);
     private final FileStorageDao fileStorageDao = new FileStorageDao();
     private final FileMetaDao fileMetaDao = new FileMetaDao();
 
@@ -119,6 +123,7 @@ public class DatabaseService {
                     }
                 }
             } catch (Exception e) {
+                logger.error("Error inserting file, rolling back", e);
                 connection.rollback();
                 throw e;
             }
@@ -173,6 +178,7 @@ public class DatabaseService {
                 connection.commit();
                 return id;
             } catch (Exception e) {
+                logger.error("Error inserting folder, rolling back", e);
                 connection.rollback();
                 throw e;
             }
@@ -192,6 +198,7 @@ public class DatabaseService {
                 deleteNodeRecursive(connection, id);
                 connection.commit();
             } catch (Exception e) {
+                logger.error("Error deleting node, rolling back", e);
                 connection.rollback();
                 throw e;
             }

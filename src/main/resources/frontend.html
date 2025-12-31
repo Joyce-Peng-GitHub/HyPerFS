@@ -1,20 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HyPerFS Web Client</title>
     <style>
-        body { font-family: sans-serif; margin: 20px; }
-        h1 { color: #333; }
-        #file-list { margin-top: 20px; border-collapse: collapse; width: 100%; }
-        #file-list th, #file-list td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        #file-list th { background-color: #f2f2f2; }
-        .folder { color: blue; cursor: pointer; text-decoration: underline; }
-        .actions button { margin-right: 5px; }
-        #upload-area, #controls { margin-bottom: 20px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; }
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        #file-list {
+            margin-top: 20px;
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        #file-list th,
+        #file-list td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        #file-list th {
+            background-color: #f2f2f2;
+        }
+
+        .folder {
+            color: blue;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .actions button {
+            margin-right: 5px;
+        }
+
+        #upload-area,
+        #controls {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+        }
     </style>
 </head>
+
 <body>
     <h1>HyPerFS Web Client</h1>
 
@@ -68,13 +105,13 @@
             tbody.innerHTML = '';
             files.forEach(file => {
                 const tr = document.createElement('tr');
-                
+
                 const type = file.isFolder ? 'Folder' : 'File';
-                const nameContent = file.isFolder 
-                    ? `<span class="folder" onclick="enterFolder(${file.id})">${file.name}</span>` 
+                const nameContent = file.isFolder
+                    ? `<span class="folder" onclick="enterFolder(${file.id})">${file.name}</span>`
                     : file.name;
 
-                const date = new Date(file.uploadTime).toLocaleString();
+                const date = new Date(file.uploadTime).toUTCString();
 
                 tr.innerHTML = `
                     <td>${file.id}</td>
@@ -148,7 +185,7 @@
                     method: 'POST',
                     body: file
                 });
-                
+
                 if (!response.ok) throw new Error(await response.text());
                 alert('Upload successful');
                 fileInput.value = '';
@@ -162,4 +199,5 @@
         refreshList();
     </script>
 </body>
+
 </html>

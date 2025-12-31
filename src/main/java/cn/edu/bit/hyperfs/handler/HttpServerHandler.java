@@ -59,6 +59,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     // POST /folder?parentId=0&name=xxx -> 创建文件夹
 
     private void handleHttpRequest(ChannelHandlerContext ctx, HttpRequest request) throws Exception {
+        logger.info("Received request: {} {}", request.method(), request.uri());
         QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
         String path = decoder.path();
 

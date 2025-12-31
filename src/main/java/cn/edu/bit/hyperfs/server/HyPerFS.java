@@ -10,8 +10,11 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HyPerFS {
+    private static final Logger logger = LoggerFactory.getLogger(HyPerFS.class);
     private final int port;
 
     public HyPerFS(int port) {
@@ -19,6 +22,7 @@ public class HyPerFS {
     }
 
     public void start() throws Exception {
+        logger.info("Starting HyPerFS server on port {}", port);
         // 创建Reactor线程组
         var bossGroup = new NioEventLoopGroup(1); // 用于接收连接
         var workerGroup = new NioEventLoopGroup(); // 用于处理网络IO
@@ -37,13 +41,20 @@ public class HyPerFS {
                         }
                     });
 
+            logger.info("HyPerFS Server started on port {}", port);
             System.out.println("HyPerFS Server started on port " + port);
 
             ChannelFuture channelFuture = serverBootstrap.bind(port).sync(); // 绑定端口并同步等待
             channelFuture.channel().closeFuture().sync();
+        } catch (Exception e) {
+            logger.error("Server start failed", e);
+            throw e;
         } finally {
+            logger.info("Stopping HyPerFS server...");
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
+            businessGroup.shutdownGracefully();
+            logger.info("HyPerFS server stopped");
         }
     }
 
