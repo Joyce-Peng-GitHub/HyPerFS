@@ -68,7 +68,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             if ("/list".equals(path)) {
                 handleList(ctx, decoder);
             } else if ("/download".equals(path)) {
-                handleDownload(ctx, decoder);
+                handleDownload(ctx, decoder, request);
             } else if ("/".equals(path) || "/index.html".equals(path) || "/favicon.ico".equals(path)) {
                 handleStatic(ctx, path);
             } else {
@@ -110,7 +110,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         sendResponse(ctx, HttpResponseStatus.OK, json, "application/json");
     }
 
-    private void handleDownload(ChannelHandlerContext ctx, QueryStringDecoder decoder) throws Exception {
+    private void handleDownload(ChannelHandlerContext ctx, QueryStringDecoder decoder, HttpRequest request)
+            throws Exception {
         long id = getLongParam(decoder, "id", -1);
         if (id == -1) {
             sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id parameter");
@@ -132,14 +133,18 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION,
                     "attachment; filename*=UTF-8''" + encodedFilename);
 
+            if (HttpUtil.isKeepAlive(request)) {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+            }
+
             ctx.write(response);
             ctx.writeAndFlush(region, ctx.newProgressivePromise());
             // 最后写一个LastHttpContent
             ChannelFuture future = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
             // 如果不是keep-alive，关闭连接
-            // if (!HttpUtil.isKeepAlive(request)) {
-            // future.addListener(ChannelFutureListener.CLOSE);
-            // }
+            if (!HttpUtil.isKeepAlive(request)) {
+                future.addListener(ChannelFutureListener.CLOSE);
+            }
 
         } catch (Exception e) {
             sendError(ctx, HttpResponseStatus.NOT_FOUND, e.getMessage());
