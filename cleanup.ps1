@@ -1,6 +1,6 @@
 Set-Location -Path $PSScriptRoot
 
-$targets = @("tmp", "data", "db")
+$targets = @("tmp", "data", "db", "logs")
 
 foreach ($name in $targets) {
 	if (Test-Path $name) {
