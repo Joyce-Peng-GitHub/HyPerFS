@@ -109,4 +109,9 @@ public class FileService {
         logger.info("Creating folder: name={}, parentId={}", name, parentId);
         return databaseService.insertFolder(parentId, name);
     }
+
+    public void moveNode(long id, long targetParentId, String strategy) throws Exception {
+        logger.info("Moving node: id={}, targetParentId={}, strategy={}", id, targetParentId, strategy);
+        databaseService.moveNode(id, targetParentId, strategy);
+    }
 }

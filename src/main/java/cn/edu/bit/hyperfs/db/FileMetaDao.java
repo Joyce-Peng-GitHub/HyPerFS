@@ -228,4 +228,23 @@ public class FileMetaDao {
         }
         return null;
     }
+
+    /**
+     * 更新节点的父ID和名称 (移动/重命名)
+     *
+     * @param connection 数据库连接
+     * @param id         节点ID
+     * @param parentId   新父ID
+     * @param name       新名称
+     * @throws SQLException SQL异常
+     */
+    public void updateParentIdAndName(Connection connection, long id, long parentId, String name) throws SQLException {
+        var sql = "UPDATE file_meta SET parent_id = ?, name = ? WHERE id = ?";
+        try (var preparedStatement = connection.prepareStatement(sql)) {
+            preparedStatement.setLong(1, parentId);
+            preparedStatement.setString(2, name);
+            preparedStatement.setLong(3, id);
+            preparedStatement.executeUpdate();
+        }
+    }
 }

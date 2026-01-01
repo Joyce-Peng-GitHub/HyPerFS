@@ -14,6 +14,7 @@ import cn.edu.bit.hyperfs.entity.FileMetaEntity;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
@@ -30,6 +31,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private String currentFilename = null;
     private long currentParentId = 0;
     private boolean isUploading = false;
+
+    // For move operation (JSON body)
+    private boolean isMoving = false;
+    private StringBuilder moveJsonBuffer = new StringBuilder();
 
     public HttpServerHandler() {
         super();
@@ -57,6 +62,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         logger.info("Received request: {} {}", request.method(), request.uri());
         QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
         String path = decoder.path();
+        logger.info("Parsed path: '{}'", path);
+        logger.info("Raw request: {}", request);
 
         if (HttpMethod.GET.equals(request.method())) {
             if ("/list".equals(path)) {
@@ -75,6 +82,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 handleDelete(ctx, decoder);
             } else if ("/folder".equals(path)) {
                 handleCreateFolder(ctx, decoder);
+            } else if ("/move".equals(path)) {
+                isMoving = true;
+                moveJsonBuffer.setLength(0);
             } else {
                 sendError(ctx, HttpResponseStatus.NOT_FOUND);
             }
@@ -92,6 +102,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 uploadSession = null;
                 isUploading = false;
                 sendResponse(ctx, HttpResponseStatus.OK, "Upload successful");
+            }
+        } else if (isMoving) {
+            moveJsonBuffer.append(content.content().toString(StandardCharsets.UTF_8));
+            if (content instanceof LastHttpContent) {
+                handleMoveJson(ctx);
+                isMoving = false;
+                moveJsonBuffer.setLength(0);
             }
         }
     }
@@ -180,6 +197,31 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             sendResponse(ctx, HttpResponseStatus.OK, String.valueOf(id));
         } catch (Exception e) {
             logger.error("Create folder failed", e);
+            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    private void handleMoveJson(ChannelHandlerContext ctx) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode node = mapper.readTree(moveJsonBuffer.toString());
+            // Safe parsing with defaults/checks
+            if (!node.has("id") || !node.has("targetParentId")) {
+                sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id or targetParentId");
+                return;
+            }
+
+            long id = node.get("id").asLong();
+            long targetParentId = node.get("targetParentId").asLong();
+            String strategy = node.has("strategy") ? node.get("strategy").asText() : "FAIL";
+
+            logger.info("Handling move request (JSON): id={}, target={}, strategy={}", id, targetParentId, strategy);
+            fileService.moveNode(id, targetParentId, strategy);
+            sendResponse(ctx, HttpResponseStatus.OK, "Move successful");
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+            sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
+        } catch (Exception e) {
+            logger.error("Move failed", e);
             sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }

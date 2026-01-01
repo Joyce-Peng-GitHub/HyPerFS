@@ -237,4 +237,115 @@ public class DatabaseService {
             return fileMetaDao.getById(connection, id);
         }
     }
+
+    /**
+     * Move Node Exception
+     */
+    public static class MoveException extends Exception {
+        public MoveException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * File already exists exception (for 409 conflict)
+     */
+    public static class FileConflictException extends MoveException {
+        public FileConflictException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * Move a node to a new parent
+     *
+     * @param id             Node ID to move
+     * @param targetParentId Target parent ID
+     * @param strategy       Conflict resolution strategy: "FAIL", "RENAME",
+     *                       "OVERWRITE"
+     * @throws Exception error
+     */
+    public void moveNode(long id, long targetParentId, String strategy) throws Exception {
+        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                // 1. Check if source exists
+                FileMetaEntity source = fileMetaDao.getById(connection, id);
+                if (source == null) {
+                    throw new MoveException("Source node not found: " + id);
+                }
+
+                // 2. Check if target folder exists (if not root)
+                if (targetParentId != 0) {
+                    FileMetaEntity targetParent = fileMetaDao.getById(connection, targetParentId);
+                    if (targetParent == null) {
+                        throw new MoveException("Target folder not found: " + targetParentId);
+                    }
+                    if (targetParent.getIsFolder() == 0) {
+                        throw new MoveException("Target is not a folder: " + targetParentId);
+                    }
+                }
+
+                // 3. Cycle detection (if source is folder)
+                if (source.getIsFolder() == 1) {
+                    long current = targetParentId;
+                    while (current != 0) {
+                        if (current == id) {
+                            throw new MoveException("Cannot move a node into its own child");
+                        }
+                        FileMetaEntity parent = fileMetaDao.getById(connection, current);
+                        if (parent == null)
+                            break;
+                        current = parent.getParentId();
+                    }
+                }
+
+                String finalName = source.getName();
+
+                // 4. Check for conflict
+                FileMetaEntity conflict = fileMetaDao.getByParentIdAndName(connection, targetParentId,
+                        source.getName());
+                if (conflict != null) {
+                    // Handle conflict based on strategy
+                    if ("RENAME".equalsIgnoreCase(strategy)) {
+                        // Find available name: name (N)
+                        String baseName = source.getName();
+                        String nameWithoutExt = baseName;
+                        String ext = "";
+                        int lastDot = baseName.lastIndexOf('.');
+                        if (lastDot > 0) {
+                            nameWithoutExt = baseName.substring(0, lastDot);
+                            ext = baseName.substring(lastDot);
+                        }
+
+                        int i = 1;
+                        while (conflict != null) {
+                            finalName = nameWithoutExt + " (" + i + ")" + ext;
+                            conflict = fileMetaDao.getByParentIdAndName(connection, targetParentId, finalName);
+                            i++;
+                        }
+                    } else if ("OVERWRITE".equalsIgnoreCase(strategy)) {
+                        // Check if overwritable
+                        if (source.getIsFolder() == 1 || conflict.getIsFolder() == 1) {
+                            throw new MoveException("Cannot overwrite folder or with folder");
+                        }
+                        // Delete conflict
+                        deleteNodeRecursive(connection, conflict.getId());
+                    } else {
+                        // FAIL (Default)
+                        throw new FileConflictException(
+                                "File with the same name already exists in the target directory.");
+                    }
+                }
+
+                // 5. Execute Move
+                fileMetaDao.updateParentIdAndName(connection, id, targetParentId, finalName);
+
+                connection.commit();
+            } catch (Exception e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+    }
 }

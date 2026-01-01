@@ -123,6 +123,7 @@
                     <td>${date}</td>
                     <td class="actions">
                         ${!file.isFolder ? `<button onclick="downloadFile(${file.id})">Download</button>` : ''}
+                        <button onclick="moveNode(${file.id})">Move</button>
                         <button onclick="deleteNode(${file.id})">Delete</button>
                     </td>
                 `;
@@ -166,6 +167,47 @@
                 refreshList();
             } catch (e) {
                 alert('Failed to delete: ' + e.message);
+            }
+        }
+
+        async function moveNode(id) {
+            const targetParentIdStr = prompt("Enter target parent folder ID:");
+            if (targetParentIdStr === null) return;
+            const targetParentId = parseInt(targetParentIdStr);
+            if (isNaN(targetParentId)) {
+                alert("Invalid Parent ID");
+                return;
+            }
+            await doMove(id, targetParentId, 'FAIL');
+        }
+
+        async function doMove(id, targetParentId, strategy) {
+            try {
+                const response = await fetch('/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, targetParentId, strategy })
+                });
+                if (response.ok) {
+                    refreshList();
+                    return;
+                }
+
+                if (response.status === 409) {
+                    const choice = prompt("File exists! Type 'RENAME' to generate copy, 'OVERWRITE' to replace (files only), or Cancel.");
+                    if (choice) {
+                        const s = choice.toUpperCase();
+                        if (s === 'RENAME' || s === 'OVERWRITE') {
+                            await doMove(id, targetParentId, s);
+                            return;
+                        }
+                    }
+                    return;
+                }
+
+                throw new Error(await response.text());
+            } catch (e) {
+                alert('Failed to move: ' + e.message);
             }
         }
 
