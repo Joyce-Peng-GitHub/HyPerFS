@@ -6,7 +6,6 @@ import io.netty.handler.codec.http.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.edu.bit.hyperfs.service.FileDownloadResource;
 import cn.edu.bit.hyperfs.service.FileService;
 import cn.edu.bit.hyperfs.service.FileUploadSession;
 import cn.edu.bit.hyperfs.entity.FileMetaEntity;
@@ -14,7 +13,6 @@ import cn.edu.bit.hyperfs.entity.FileMetaEntity;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
@@ -24,7 +22,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     public static final String DEFAULT_TMP_DIRECTORY = "./tmp/";
     public static final String DEFAULT_FILENAME = "unknown";
 
-    private FileService fileService = new FileService();
+    private final FileService fileService = new FileService();
     private FileUploadSession uploadSession = null;
 
     // 用于解析 multipart
@@ -32,16 +30,15 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private long currentParentId = 0;
     private boolean isUploading = false;
 
-    // For move operation (JSON body)
+    // 用于移动操作 (JSON body)
     private boolean isMoving = false;
     private StringBuilder moveJsonBuffer = new StringBuilder();
 
-    // For rename operation
-    // For rename operation
+    // 用于重命名操作
     private boolean isRenaming = false;
     private StringBuilder renameJsonBuffer = new StringBuilder();
 
-    // For copy operation
+    // 用于复制操作
     private boolean isCopying = false;
     private StringBuilder copyJsonBuffer = new StringBuilder();
 
@@ -50,13 +47,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) throws Exception {
-        if (msg instanceof HttpRequest request) {
-            handleHttpRequest(ctx, request);
+    protected void channelRead0(ChannelHandlerContext context, HttpObject message) throws Exception {
+        if (message instanceof HttpRequest request) {
+            handleHttpRequest(context, request);
         }
 
-        if (msg instanceof HttpContent content) {
-            handleHttpContent(ctx, content);
+        if (message instanceof HttpContent content) {
+            handleHttpContent(context, content);
         }
     }
 
@@ -67,30 +64,30 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     // POST /delete?id=1 -> 删除
     // POST /folder?parentId=0&name=xxx -> 创建文件夹
 
-    private void handleHttpRequest(ChannelHandlerContext ctx, HttpRequest request) throws Exception {
+    private void handleHttpRequest(ChannelHandlerContext context, HttpRequest request) throws Exception {
         logger.info("Received request: {} {}", request.method(), request.uri());
-        QueryStringDecoder decoder = new QueryStringDecoder(request.uri());
-        String path = decoder.path();
+        var queryStringDecoder = new QueryStringDecoder(request.uri());
+        var path = queryStringDecoder.path();
         logger.info("Parsed path: '{}'", path);
         logger.info("Raw request: {}", request);
 
         if (HttpMethod.GET.equals(request.method())) {
             if ("/list".equals(path)) {
-                handleList(ctx, decoder);
+                handleList(context, queryStringDecoder);
             } else if ("/download".equals(path)) {
-                handleDownload(ctx, decoder, request);
+                handleDownload(context, queryStringDecoder, request);
             } else if ("/".equals(path) || "/index.html".equals(path) || "/favicon.ico".equals(path)) {
-                handleStatic(ctx, path);
+                handleStatic(context, path);
             } else {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND);
+                sendError(context, HttpResponseStatus.NOT_FOUND);
             }
         } else if (HttpMethod.POST.equals(request.method())) {
             if ("/upload".equals(path)) {
-                handleUploadStart(ctx, decoder);
+                handleUploadStart(context, queryStringDecoder);
             } else if ("/delete".equals(path)) {
-                handleDelete(ctx, decoder);
+                handleDelete(context, queryStringDecoder);
             } else if ("/folder".equals(path)) {
-                handleCreateFolder(ctx, decoder);
+                handleCreateFolder(context, queryStringDecoder);
             } else if ("/move".equals(path)) {
                 isMoving = true;
                 moveJsonBuffer.setLength(0);
@@ -101,14 +98,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 isCopying = true;
                 copyJsonBuffer.setLength(0);
             } else {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND);
+                sendError(context, HttpResponseStatus.NOT_FOUND);
             }
         } else {
-            sendError(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED);
+            sendError(context, HttpResponseStatus.METHOD_NOT_ALLOWED);
         }
     }
 
-    private void handleHttpContent(ChannelHandlerContext ctx, HttpContent content) throws Exception {
+    private void handleHttpContent(ChannelHandlerContext context, HttpContent content) throws Exception {
         if (isUploading && uploadSession != null) {
             uploadSession.processChunk(content.content());
 
@@ -116,58 +113,59 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 fileService.completeUpload(uploadSession, currentParentId, currentFilename);
                 uploadSession = null;
                 isUploading = false;
-                sendResponse(ctx, HttpResponseStatus.OK, "Upload successful");
+                sendResponse(context, HttpResponseStatus.OK, "Upload successful");
             }
         } else if (isMoving) {
             moveJsonBuffer.append(content.content().toString(StandardCharsets.UTF_8));
             if (content instanceof LastHttpContent) {
-                handleMoveJson(ctx);
+                handleMoveJson(context);
                 isMoving = false;
                 moveJsonBuffer.setLength(0);
             }
         } else if (isRenaming) {
             renameJsonBuffer.append(content.content().toString(StandardCharsets.UTF_8));
             if (content instanceof LastHttpContent) {
-                handleRenameJson(ctx);
+                handleRenameJson(context);
                 isRenaming = false;
                 renameJsonBuffer.setLength(0);
             }
         } else if (isCopying) {
             copyJsonBuffer.append(content.content().toString(StandardCharsets.UTF_8));
             if (content instanceof LastHttpContent) {
-                handleCopyJson(ctx);
+                handleCopyJson(context);
                 isCopying = false;
                 copyJsonBuffer.setLength(0);
             }
         }
     }
 
-    private void handleList(ChannelHandlerContext ctx, QueryStringDecoder decoder) throws Exception {
-        long parentId = getLongParam(decoder, "parentId", 0);
+    private void handleList(ChannelHandlerContext context, QueryStringDecoder queryStringDecoder) throws Exception {
+        var parentId = getLongParam(queryStringDecoder, "parentId", 0);
         List<FileMetaEntity> list = fileService.list(parentId);
-        ObjectMapper mapper = new ObjectMapper();
-        String json = mapper.writeValueAsString(list);
-        sendResponse(ctx, HttpResponseStatus.OK, json, "application/json");
+        var objectMapper = new ObjectMapper();
+        var json = objectMapper.writeValueAsString(list);
+        sendResponse(context, HttpResponseStatus.OK, json, "application/json");
     }
 
-    private void handleDownload(ChannelHandlerContext ctx, QueryStringDecoder decoder, HttpRequest request)
+    private void handleDownload(ChannelHandlerContext context, QueryStringDecoder queryStringDecoder,
+            HttpRequest request)
             throws Exception {
-        long id = getLongParam(decoder, "id", -1);
+        var id = getLongParam(queryStringDecoder, "id", -1);
         if (id == -1) {
-            sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id parameter");
+            sendError(context, HttpResponseStatus.BAD_REQUEST, "Missing id parameter");
             return;
         }
 
         try {
             // 解析Range头，支持断点续传
             // 简单处理，暂不支持复杂的Range
-            FileDownloadResource downloadResource = fileService.startDownload(id, 0, Long.MAX_VALUE);
-            DefaultFileRegion region = downloadResource.region();
-            String filename = downloadResource.filename();
-            // URL encode filename to support special characters
-            String encodedFilename = java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+            var downloadResource = fileService.startDownload(id, 0, Long.MAX_VALUE);
+            var region = downloadResource.region();
+            var filename = downloadResource.filename();
+            // 对文件名进行URL编码以支持特殊字符
+            var encodedFilename = java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
 
-            HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+            var response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
             response.headers().set(HttpHeaderNames.CONTENT_LENGTH, region.count());
             response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
             response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION,
@@ -177,24 +175,25 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
             }
 
-            ctx.write(response);
-            ctx.writeAndFlush(region, ctx.newProgressivePromise());
+            context.write(response);
+            context.writeAndFlush(region, context.newProgressivePromise());
             // 最后写一个LastHttpContent
-            ChannelFuture future = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+            var future = context.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
             // 如果不是keep-alive，关闭连接
             if (!HttpUtil.isKeepAlive(request)) {
                 future.addListener(ChannelFutureListener.CLOSE);
             }
 
-        } catch (Exception e) {
-            logger.error("Download failed", e);
-            sendError(ctx, HttpResponseStatus.NOT_FOUND, e.getMessage());
+        } catch (Exception exception) {
+            logger.error("Download failed", exception);
+            sendError(context, HttpResponseStatus.NOT_FOUND, exception.getMessage());
         }
     }
 
-    private void handleUploadStart(ChannelHandlerContext ctx, QueryStringDecoder decoder) throws Exception {
-        long parentId = getLongParam(decoder, "parentId", 0);
-        String filename = getStringParam(decoder, "filename", DEFAULT_FILENAME);
+    private void handleUploadStart(ChannelHandlerContext context, QueryStringDecoder queryStringDecoder)
+            throws Exception {
+        var parentId = getLongParam(queryStringDecoder, "parentId", 0);
+        var filename = getStringParam(queryStringDecoder, "filename", DEFAULT_FILENAME);
 
         this.currentParentId = parentId;
         this.currentFilename = filename;
@@ -203,176 +202,176 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         // 不发送响应，等待数据传输完成
     }
 
-    private void handleDelete(ChannelHandlerContext ctx, QueryStringDecoder decoder) {
-        long id = getLongParam(decoder, "id", -1);
+    private void handleDelete(ChannelHandlerContext context, QueryStringDecoder queryStringDecoder) {
+        var id = getLongParam(queryStringDecoder, "id", -1);
         if (id == -1) {
-            sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id parameter");
+            sendError(context, HttpResponseStatus.BAD_REQUEST, "Missing id parameter");
             return;
         }
         try {
             fileService.delete(id);
-            sendResponse(ctx, HttpResponseStatus.OK, "Deletion successful");
-        } catch (Exception e) {
-            logger.error("Delete failed", e);
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            sendResponse(context, HttpResponseStatus.OK, "Deletion successful");
+        } catch (Exception exception) {
+            logger.error("Delete failed", exception);
+            sendError(context, HttpResponseStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
         }
     }
 
-    private void handleCreateFolder(ChannelHandlerContext ctx, QueryStringDecoder decoder) {
-        long parentId = getLongParam(decoder, "parentId", 0);
-        String name = getStringParam(decoder, "name", "New Folder");
+    private void handleCreateFolder(ChannelHandlerContext context, QueryStringDecoder queryStringDecoder) {
+        var parentId = getLongParam(queryStringDecoder, "parentId", 0);
+        var name = getStringParam(queryStringDecoder, "name", "New Folder");
         try {
-            long id = fileService.createFolder(parentId, name);
-            sendResponse(ctx, HttpResponseStatus.OK, String.valueOf(id));
-        } catch (Exception e) {
-            logger.error("Create folder failed", e);
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            var id = fileService.createFolder(parentId, name);
+            sendResponse(context, HttpResponseStatus.OK, String.valueOf(id));
+        } catch (Exception exception) {
+            logger.error("Create folder failed", exception);
+            sendError(context, HttpResponseStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
         }
     }
 
-    private void handleMoveJson(ChannelHandlerContext ctx) {
+    private void handleMoveJson(ChannelHandlerContext context) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode node = mapper.readTree(moveJsonBuffer.toString());
-            // Safe parsing with defaults/checks
-            if (!node.has("id") || !node.has("targetParentId")) {
-                sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id or targetParentId");
+            var objectMapper = new ObjectMapper();
+            var jsonNode = objectMapper.readTree(moveJsonBuffer.toString());
+            // 安全解析，包含默认值和检查
+            if (!jsonNode.has("id") || !jsonNode.has("targetParentId")) {
+                sendError(context, HttpResponseStatus.BAD_REQUEST, "Missing id or targetParentId");
                 return;
             }
 
-            long id = node.get("id").asLong();
-            long targetParentId = node.get("targetParentId").asLong();
-            String strategy = node.has("strategy") ? node.get("strategy").asText() : "FAIL";
+            var id = jsonNode.get("id").asLong();
+            var targetParentId = jsonNode.get("targetParentId").asLong();
+            var strategy = jsonNode.has("strategy") ? jsonNode.get("strategy").asText() : "FAIL";
 
             logger.info("Handling move request (JSON): id={}, target={}, strategy={}", id, targetParentId, strategy);
             fileService.moveNode(id, targetParentId, strategy);
-            sendResponse(ctx, HttpResponseStatus.OK, "Move successful");
-        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
-            sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
-        } catch (Exception e) {
-            logger.error("Move failed", e);
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            sendResponse(context, HttpResponseStatus.OK, "Move successful");
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException exception) {
+            sendError(context, HttpResponseStatus.CONFLICT, exception.getMessage());
+        } catch (Exception exception) {
+            logger.error("Move failed", exception);
+            sendError(context, HttpResponseStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
         }
     }
 
-    private void handleRenameJson(ChannelHandlerContext ctx) {
+    private void handleRenameJson(ChannelHandlerContext context) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode node = mapper.readTree(renameJsonBuffer.toString());
+            var objectMapper = new ObjectMapper();
+            var jsonNode = objectMapper.readTree(renameJsonBuffer.toString());
 
-            if (!node.has("id") || !node.has("name")) {
-                sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id or name");
+            if (!jsonNode.has("id") || !jsonNode.has("name")) {
+                sendError(context, HttpResponseStatus.BAD_REQUEST, "Missing id or name");
                 return;
             }
 
-            long id = node.get("id").asLong();
-            String name = node.get("name").asText();
+            var id = jsonNode.get("id").asLong();
+            var name = jsonNode.get("name").asText();
 
             logger.info("Handling rename request: id={}, name={}", id, name);
             fileService.renameNode(id, name);
-            sendResponse(ctx, HttpResponseStatus.OK, "Rename successful");
-        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
-            sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
-        } catch (Exception e) {
-            logger.error("Rename failed", e);
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            sendResponse(context, HttpResponseStatus.OK, "Rename successful");
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException exception) {
+            sendError(context, HttpResponseStatus.CONFLICT, exception.getMessage());
+        } catch (Exception exception) {
+            logger.error("Rename failed", exception);
+            sendError(context, HttpResponseStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
         }
     }
 
-    private void handleCopyJson(ChannelHandlerContext ctx) {
+    private void handleCopyJson(ChannelHandlerContext context) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode node = mapper.readTree(copyJsonBuffer.toString());
+            var objectMapper = new ObjectMapper();
+            var jsonNode = objectMapper.readTree(copyJsonBuffer.toString());
 
-            if (!node.has("id") || !node.has("targetParentId")) {
-                sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id or targetParentId");
+            if (!jsonNode.has("id") || !jsonNode.has("targetParentId")) {
+                sendError(context, HttpResponseStatus.BAD_REQUEST, "Missing id or targetParentId");
                 return;
             }
 
-            long id = node.get("id").asLong();
-            long targetParentId = node.get("targetParentId").asLong();
-            String strategy = node.has("strategy") ? node.get("strategy").asText() : "FAIL";
+            var id = jsonNode.get("id").asLong();
+            var targetParentId = jsonNode.get("targetParentId").asLong();
+            var strategy = jsonNode.has("strategy") ? jsonNode.get("strategy").asText() : "FAIL";
 
             logger.info("Handling copy request: id={}, target={}, strategy={}", id, targetParentId, strategy);
             fileService.copyNode(id, targetParentId, strategy);
-            sendResponse(ctx, HttpResponseStatus.OK, "Copy successful");
-        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
-            sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
-        } catch (Exception e) {
-            logger.error("Copy failed", e);
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            sendResponse(context, HttpResponseStatus.OK, "Copy successful");
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException exception) {
+            sendError(context, HttpResponseStatus.CONFLICT, exception.getMessage());
+        } catch (Exception exception) {
+            logger.error("Copy failed", exception);
+            sendError(context, HttpResponseStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
         }
     }
 
-    private void handleStatic(ChannelHandlerContext ctx, String path) throws Exception {
+    private void handleStatic(ChannelHandlerContext context, String path) throws Exception {
         if ("/favicon.ico".equals(path)) {
-            sendError(ctx, HttpResponseStatus.NOT_FOUND);
+            sendError(context, HttpResponseStatus.NOT_FOUND);
             return;
         }
-        // Serve frontend.html
-        try (var is = getClass().getResourceAsStream("/frontend.html")) {
-            if (is == null) {
-                sendError(ctx, HttpResponseStatus.NOT_FOUND, "frontend.html not found");
+        // 返回 frontend.html
+        try (var inputStream = getClass().getResourceAsStream("/frontend.html")) {
+            if (inputStream == null) {
+                sendError(context, HttpResponseStatus.NOT_FOUND, "frontend.html not found");
                 return;
             }
-            byte[] content = is.readAllBytes();
-            FullHttpResponse response = new DefaultFullHttpResponse(
+            byte[] content = inputStream.readAllBytes();
+            var response = new DefaultFullHttpResponse(
                     HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.copiedBuffer(content));
             response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/html; charset=UTF-8");
             response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
-            ctx.writeAndFlush(response);
+            context.writeAndFlush(response);
         }
     }
 
-    private long getLongParam(QueryStringDecoder decoder, String name, long defaultValue) {
-        if (decoder.parameters().containsKey(name)) {
-            return Long.parseLong(decoder.parameters().get(name).get(0));
-        }
-        return defaultValue;
-    }
-
-    private String getStringParam(QueryStringDecoder decoder, String name, String defaultValue) {
-        if (decoder.parameters().containsKey(name)) {
-            return decoder.parameters().get(name).get(0);
+    private long getLongParam(QueryStringDecoder queryStringDecoder, String name, long defaultValue) {
+        if (queryStringDecoder.parameters().containsKey(name)) {
+            return Long.parseLong(queryStringDecoder.parameters().get(name).get(0));
         }
         return defaultValue;
     }
 
-    private void sendResponse(ChannelHandlerContext ctx, HttpResponseStatus status, String message) {
-        sendResponse(ctx, status, message, "text/plain; charset=UTF-8");
+    private String getStringParam(QueryStringDecoder queryStringDecoder, String name, String defaultValue) {
+        if (queryStringDecoder.parameters().containsKey(name)) {
+            return queryStringDecoder.parameters().get(name).get(0);
+        }
+        return defaultValue;
     }
 
-    private void sendResponse(ChannelHandlerContext ctx, HttpResponseStatus status, String message,
+    private void sendResponse(ChannelHandlerContext context, HttpResponseStatus status, String message) {
+        sendResponse(context, status, message, "text/plain; charset=UTF-8");
+    }
+
+    private void sendResponse(ChannelHandlerContext context, HttpResponseStatus status, String message,
             String contentType) {
-        FullHttpResponse response = new DefaultFullHttpResponse(
+        var response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1, status, Unpooled.copiedBuffer(message, StandardCharsets.UTF_8));
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
-        ctx.writeAndFlush(response);
+        context.writeAndFlush(response);
     }
 
-    private void sendError(ChannelHandlerContext ctx, HttpResponseStatus status) {
-        sendError(ctx, status, status.reasonPhrase());
+    private void sendError(ChannelHandlerContext context, HttpResponseStatus status) {
+        sendError(context, status, status.reasonPhrase());
     }
 
-    private void sendError(ChannelHandlerContext ctx, HttpResponseStatus status, String message) {
-        sendResponse(ctx, status, "Error: " + message);
+    private void sendError(ChannelHandlerContext context, HttpResponseStatus status, String message) {
+        sendResponse(context, status, "Error: " + message);
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+    public void exceptionCaught(ChannelHandlerContext context, Throwable cause) {
         logger.error("Exception caught while processing request", cause);
-        if (ctx.channel().isActive()) {
-            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, cause.getMessage());
+        if (context.channel().isActive()) {
+            sendError(context, HttpResponseStatus.INTERNAL_SERVER_ERROR, cause.getMessage());
         }
-        ctx.close();
+        context.close();
     }
 
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    public void channelInactive(ChannelHandlerContext context) throws Exception {
         if (uploadSession != null) {
             uploadSession.abort();
         }
-        super.channelInactive(ctx);
+        super.channelInactive(context);
     }
 }

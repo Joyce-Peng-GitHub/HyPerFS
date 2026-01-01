@@ -20,18 +20,26 @@ public class DatabaseFactory {
 		logger.info("Initializing DatabaseFactory...");
 		ensureDatabaseDirectoryExists();
 
-		var config = new HikariConfig();
-		config.setJdbcUrl("jdbc:sqlite:" + DATABASE_PATH);
-		config.setPoolName("HyPerFSPool");
-		config.setMaximumPoolSize(10);
-		config.setConnectionInitSql("PRAGMA journal_mode = WAL;");
+		var hikariConfig = new HikariConfig();
+		hikariConfig.setJdbcUrl("jdbc:sqlite:" + DATABASE_PATH);
+		hikariConfig.setPoolName("HyPerFSPool");
+		hikariConfig.setMaximumPoolSize(10);
+		hikariConfig.setConnectionInitSql("PRAGMA journal_mode = WAL;");
 
-		dataSource = new HikariDataSource(config);
+		dataSource = new HikariDataSource(hikariConfig);
 
 		initTables();
 		logger.info("Database initialized successfully at {}", DATABASE_PATH);
 	}
 
+	/**
+	 * 获取数据库工厂单例
+	 * 
+	 * 详细描述：
+	 * 使用双重检查锁定模式（Double-Checked Locking）实现线程安全的单例获取。
+	 *
+	 * @return DatabaseFactory 实例
+	 */
 	public static DatabaseFactory getInstance() {
 		if (instance == null) {
 			synchronized (DatabaseFactory.class) {
@@ -43,6 +51,14 @@ public class DatabaseFactory {
 		return instance;
 	}
 
+	/**
+	 * 获取数据源
+	 * 
+	 * 详细描述：
+	 * 返回配置好的 HikariDataSource 连接池实例。
+	 *
+	 * @return HikariDataSource 数据源
+	 */
 	public HikariDataSource getDataSource() {
 		return dataSource;
 	}
@@ -61,37 +77,37 @@ public class DatabaseFactory {
 
 			// 创建 file_storage 表
 			statement.execute("""
-						CREATE TABLE IF NOT EXISTS file_storage (
-							hash TEXT NOT NULL PRIMARY KEY,
-							sz INTEGER NOT NULL,
-							ref_cnt INTEGER NOT NULL DEFAULT 1,
-							created_at TEXT DEFAULT CURRENT_TIMESTAMP
-						) STRICT;
+					    CREATE TABLE IF NOT EXISTS file_storage (
+					        hash TEXT NOT NULL PRIMARY KEY,
+					        sz INTEGER NOT NULL,
+					        ref_cnt INTEGER NOT NULL DEFAULT 1,
+					        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+					    ) STRICT;
 					""");
 
 			// 创建 file_meta 表
 			statement.execute("""
-						CREATE TABLE IF NOT EXISTS file_meta (
-							id INTEGER PRIMARY KEY,
-							parent_id INTEGER NOT NULL DEFAULT 0,
-							name TEXT NOT NULL,
-							is_folder INTEGER NOT NULL,
-							hash TEXT,
-							sz INTEGER DEFAULT 0,
-							up_tm INTEGER NOT NULL,
-							down_cnt INTEGER NOT NULL DEFAULT 0,
-							UNIQUE (parent_id, name)
-						) STRICT;
+					    CREATE TABLE IF NOT EXISTS file_meta (
+					        id INTEGER PRIMARY KEY,
+					        parent_id INTEGER NOT NULL DEFAULT 0,
+					        name TEXT NOT NULL,
+					        is_folder INTEGER NOT NULL,
+					        hash TEXT,
+					        sz INTEGER DEFAULT 0,
+					        up_tm INTEGER NOT NULL,
+					        down_cnt INTEGER NOT NULL DEFAULT 0,
+					        UNIQUE (parent_id, name)
+					    ) STRICT;
 					""");
 
 			// 创建索引
 			statement.execute("""
-						CREATE INDEX IF NOT EXISTS idx_parent_id
-						ON file_meta (parent_id);
+					    CREATE INDEX IF NOT EXISTS idx_parent_id
+					    ON file_meta (parent_id);
 					""");
 
-		} catch (SQLException e) {
-			throw new RuntimeException("Failed to initialize database: " + e.getMessage(), e);
+		} catch (SQLException exception) {
+			throw new RuntimeException("Failed to initialize database: " + exception.getMessage(), exception);
 		}
 	}
 }
