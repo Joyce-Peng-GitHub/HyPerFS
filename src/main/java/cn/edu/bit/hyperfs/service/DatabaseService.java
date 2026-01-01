@@ -276,6 +276,10 @@ public class DatabaseService {
                     throw new MoveException("Source node not found: " + id);
                 }
 
+                if (source.getParentId() == targetParentId) {
+                    throw new MoveException("Source and destination folders are the same.");
+                }
+
                 // 2. Check if target folder exists (if not root)
                 if (targetParentId != 0) {
                     FileMetaEntity targetParent = fileMetaDao.getById(connection, targetParentId);
