@@ -141,6 +141,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             }
 
         } catch (Exception e) {
+            logger.error("Download failed", e);
             sendError(ctx, HttpResponseStatus.NOT_FOUND, e.getMessage());
         }
     }
@@ -166,6 +167,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             fileService.delete(id);
             sendResponse(ctx, HttpResponseStatus.OK, "Deletion successful");
         } catch (Exception e) {
+            logger.error("Delete failed", e);
             sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
@@ -177,6 +179,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             long id = fileService.createFolder(parentId, name);
             sendResponse(ctx, HttpResponseStatus.OK, String.valueOf(id));
         } catch (Exception e) {
+            logger.error("Create folder failed", e);
             sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }
