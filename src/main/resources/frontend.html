@@ -75,6 +75,7 @@
                 <th>Name</th>
                 <th>Type</th>
                 <th>Size</th>
+                <th>Downloads</th>
                 <th>Upload Time</th>
                 <th>Actions</th>
             </tr>
@@ -111,13 +112,14 @@
                     ? `<span class="folder" onclick="enterFolder(${file.id})">${file.name}</span>`
                     : file.name;
 
-                const date = new Date(file.uploadTime).toUTCString();
+                const date = new Date(file.uploadTime).toLocaleString();
 
                 tr.innerHTML = `
                     <td>${file.id}</td>
                     <td>${nameContent}</td>
                     <td>${type}</td>
                     <td>${file.size}</td>
+                    <td>${file.downloadCount}</td>
                     <td>${date}</td>
                     <td class="actions">
                         ${!file.isFolder ? `<button onclick="downloadFile(${file.id})">Download</button>` : ''}
