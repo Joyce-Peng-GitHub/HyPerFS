@@ -37,8 +37,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private StringBuilder moveJsonBuffer = new StringBuilder();
 
     // For rename operation
+    // For rename operation
     private boolean isRenaming = false;
     private StringBuilder renameJsonBuffer = new StringBuilder();
+
+    // For copy operation
+    private boolean isCopying = false;
+    private StringBuilder copyJsonBuffer = new StringBuilder();
 
     public HttpServerHandler() {
         super();
@@ -92,6 +97,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             } else if ("/rename".equals(path)) {
                 isRenaming = true;
                 renameJsonBuffer.setLength(0);
+            } else if ("/copy".equals(path)) {
+                isCopying = true;
+                copyJsonBuffer.setLength(0);
             } else {
                 sendError(ctx, HttpResponseStatus.NOT_FOUND);
             }
@@ -123,6 +131,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 handleRenameJson(ctx);
                 isRenaming = false;
                 renameJsonBuffer.setLength(0);
+            }
+        } else if (isCopying) {
+            copyJsonBuffer.append(content.content().toString(StandardCharsets.UTF_8));
+            if (content instanceof LastHttpContent) {
+                handleCopyJson(ctx);
+                isCopying = false;
+                copyJsonBuffer.setLength(0);
             }
         }
     }
@@ -260,6 +275,31 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
         } catch (Exception e) {
             logger.error("Rename failed", e);
+            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    private void handleCopyJson(ChannelHandlerContext ctx) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode node = mapper.readTree(copyJsonBuffer.toString());
+
+            if (!node.has("id") || !node.has("targetParentId")) {
+                sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id or targetParentId");
+                return;
+            }
+
+            long id = node.get("id").asLong();
+            long targetParentId = node.get("targetParentId").asLong();
+            String strategy = node.has("strategy") ? node.get("strategy").asText() : "FAIL";
+
+            logger.info("Handling copy request: id={}, target={}, strategy={}", id, targetParentId, strategy);
+            fileService.copyNode(id, targetParentId, strategy);
+            sendResponse(ctx, HttpResponseStatus.OK, "Copy successful");
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+            sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
+        } catch (Exception e) {
+            logger.error("Copy failed", e);
             sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }

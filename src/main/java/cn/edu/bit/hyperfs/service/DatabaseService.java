@@ -382,4 +382,103 @@ public class DatabaseService {
             }
         }
     }
+
+    public void copyNode(long id, long targetParentId, String strategy) throws Exception {
+        try (Connection connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                // 1. 获取源节点
+                FileMetaEntity source = fileMetaDao.getById(connection, id);
+                if (source == null) {
+                    throw new MoveException("Source node not found: " + id);
+                }
+
+                // 2. 检查目标是否存在
+                if (targetParentId != 0) {
+                    FileMetaEntity targetParent = fileMetaDao.getById(connection, targetParentId);
+                    if (targetParent == null) {
+                        throw new MoveException("Target folder not found: " + targetParentId);
+                    }
+                    if (targetParent.getIsFolder() == 0) {
+                        throw new MoveException("Target is not a folder: " + targetParentId);
+                    }
+                }
+
+                String targetName = source.getName();
+
+                // 3. 冲突检测与处理
+                FileMetaEntity conflict = fileMetaDao.getByParentIdAndName(connection, targetParentId,
+                        source.getName());
+                if (conflict != null) {
+                    if ("RENAME".equalsIgnoreCase(strategy)) {
+                        String baseName = source.getName();
+                        String nameWithoutExt = baseName;
+                        String ext = "";
+                        int lastDot = baseName.lastIndexOf('.');
+                        if (lastDot > 0) {
+                            nameWithoutExt = baseName.substring(0, lastDot);
+                            ext = baseName.substring(lastDot);
+                        }
+
+                        int i = 1;
+                        while (conflict != null) {
+                            targetName = nameWithoutExt + " (" + i + ")" + ext;
+                            conflict = fileMetaDao.getByParentIdAndName(connection, targetParentId, targetName);
+                            i++;
+                        }
+                    } else if ("OVERWRITE".equalsIgnoreCase(strategy)) {
+                        if (conflict.getId() == id) {
+                            throw new MoveException("Cannot overwrite file with itself");
+                        }
+                        if (source.getIsFolder() == 1 || conflict.getIsFolder() == 1) {
+                            throw new MoveException("Cannot overwrite folder or with folder");
+                        }
+
+                        // Optimized: Direct update for file-to-file
+                        if (!source.getHash().equals(conflict.getHash())) {
+                            fileStorageDao.decrementReferenceCount(connection, conflict.getHash());
+                            fileStorageDao.incrementReferenceCount(connection, source.getHash());
+                        }
+
+                        fileMetaDao.updateById(connection, conflict.getId(), source.getHash(), source.getSize(),
+                                System.currentTimeMillis());
+                        connection.commit();
+                        return; // Done
+                    } else {
+                        throw new FileConflictException("File with the same name already exists.");
+                    }
+                }
+
+                // 4. 执行递归复制
+                copyNodeRecursively(connection, id, targetParentId, targetName);
+
+                connection.commit();
+            } catch (Exception e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+    }
+
+    private void copyNodeRecursively(Connection connection, long sourceId, long targetParentId, String targetName)
+            throws SQLException {
+        FileMetaEntity source = fileMetaDao.getById(connection, sourceId);
+        if (source == null)
+            return;
+
+        if (source.getIsFolder() == 0) {
+            // 文件：增加引用计数，插入新记录
+            fileStorageDao.incrementReferenceCount(connection, source.getHash());
+            fileMetaDao.insertFile(connection, targetParentId, targetName, source.getHash(), source.getSize(),
+                    System.currentTimeMillis());
+        } else {
+            // 文件夹：创建新文件夹，递归复制子节点
+            long newFolderId = fileMetaDao.insertFolder(connection, targetParentId, targetName,
+                    System.currentTimeMillis());
+            ArrayList<FileMetaEntity> children = fileMetaDao.getByParentId(connection, sourceId);
+            for (FileMetaEntity child : children) {
+                copyNodeRecursively(connection, child.getId(), newFolderId, child.getName());
+            }
+        }
+    }
 }

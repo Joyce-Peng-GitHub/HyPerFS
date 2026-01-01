@@ -119,4 +119,9 @@ public class FileService {
         logger.info("Renaming node: id={}, newName={}", id, newName);
         databaseService.renameNode(id, newName);
     }
+
+    public void copyNode(long id, long targetParentId, String strategy) throws Exception {
+        logger.info("Copying node: id={}, targetParentId={}, strategy={}", id, targetParentId, strategy);
+        databaseService.copyNode(id, targetParentId, strategy);
+    }
 }

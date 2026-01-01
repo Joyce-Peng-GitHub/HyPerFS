@@ -124,6 +124,7 @@
                     <td class="actions">
                         ${!file.isFolder ? `<button onclick="downloadFile(${file.id})">Download</button>` : ''}
                         <button onclick="moveNode(${file.id})">Move</button>
+                        <button onclick="copyNode(${file.id})">Copy</button>
                         <button onclick="renameNode(${file.id}, '${file.name}')">Rename</button>
                         <button onclick="deleteNode(${file.id})">Delete</button>
                     </td>
@@ -235,6 +236,47 @@
                 throw new Error(await response.text());
             } catch (e) {
                 alert('Failed to rename: ' + e.message);
+            }
+        }
+
+        async function copyNode(id) {
+            const targetParentIdStr = prompt("Enter target parent folder ID:");
+            if (targetParentIdStr === null) return;
+            const targetParentId = parseInt(targetParentIdStr);
+            if (isNaN(targetParentId)) {
+                alert("Invalid Parent ID");
+                return;
+            }
+            await doCopy(id, targetParentId, 'FAIL');
+        }
+
+        async function doCopy(id, targetParentId, strategy) {
+            try {
+                const response = await fetch('/copy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, targetParentId, strategy })
+                });
+                if (response.ok) {
+                    refreshList();
+                    return;
+                }
+
+                if (response.status === 409) {
+                    const choice = prompt("File exists! Type 'RENAME' to generate copy, 'OVERWRITE' to replace (files only), or Cancel.");
+                    if (choice) {
+                        const s = choice.toUpperCase();
+                        if (s === 'RENAME' || s === 'OVERWRITE') {
+                            await doCopy(id, targetParentId, s);
+                            return;
+                        }
+                    }
+                    return;
+                }
+
+                throw new Error(await response.text());
+            } catch (e) {
+                alert('Failed to copy: ' + e.message);
             }
         }
 
