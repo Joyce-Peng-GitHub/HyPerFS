@@ -46,12 +46,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
-    // 简单的路由和处理逻辑
-    // 为了简化，这里假设上传是 POST
-    // /upload?parentId=0&filename=xxx，Body是纯二进制流，而不是multipart/form-data
-    // 如果必须支持multipart，Netty有HttpPostRequestDecoder，但会复杂很多。
-    // 根据"协议解析：分别对上传、下载、列表指令做出反应，可以先不实现具体的功能"，我先实现简单的API约定。
-
     // API 设计:
     // GET /list?parentId=0 -> JSON列表
     // POST /upload?parentId=0&filename=xxx -> Body为文件内容
