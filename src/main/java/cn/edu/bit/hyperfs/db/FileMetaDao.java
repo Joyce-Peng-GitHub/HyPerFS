@@ -136,16 +136,18 @@ public class FileMetaDao {
      *
      * @param connection 数据库连接
      * @param id         节点ID
+     * @param hash       新哈希
      * @param size       新大小
      * @param time       新时间戳
      * @throws SQLException SQL异常
      */
-    public void updateById(Connection connection, long id, long size, long time) throws SQLException {
-        var sql = "UPDATE file_meta SET sz = ?, up_tm = ? WHERE id = ?";
+    public void updateById(Connection connection, long id, String hash, long size, long time) throws SQLException {
+        var sql = "UPDATE file_meta SET hash = ?, sz = ?, up_tm = ? WHERE id = ?";
         try (var preparedStatement = connection.prepareStatement(sql)) {
-            preparedStatement.setLong(1, size);
-            preparedStatement.setLong(2, time);
-            preparedStatement.setLong(3, id);
+            preparedStatement.setString(1, hash);
+            preparedStatement.setLong(2, size);
+            preparedStatement.setLong(3, time);
+            preparedStatement.setLong(4, id);
             preparedStatement.executeUpdate();
         }
     }

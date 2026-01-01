@@ -106,20 +106,9 @@ public class DatabaseService {
                         }
 
                         long time = System.currentTimeMillis();
-                        // 这里可以直接更新，或者先删除后插入。为了复用，这里选择删除旧的，插入新的（或者更新旧的）。
-                        // 计划中说的是：减少原文件的引用计数。检查文件是否存在，不存在就插入，存在就增加引用计数。获取时间，创建节点，返回。
-                        // 其实对于覆盖上传，应该更新元数据。
-
-                        fileMetaDao.updateById(connection, existingNode.getId(), size, time);
-                        // 还需要更新哈希值，但FileMetaDao.updateById目前只更新了size和time。
-                        // 这是一个疏忽，需要修改FileMetaDao或者单独处理。
-                        // 鉴于updateById目前实现，我们可以尝试删除旧节点，插入新节点（ID会变），或者修改update方法。
-                        // 为了简单和一致性，并遵循"创建节点"的描述，我们删除旧节点，插入新节点。
-                        fileMetaDao.removeById(connection, existingNode.getId());
-                        long id = fileMetaDao.insertFile(connection, parentId, filename, hash, size, time);
-
+                        fileMetaDao.updateById(connection, existingNode.getId(), hash, size, time);
                         connection.commit();
-                        return new InsertFileResult(false, id);
+                        return new InsertFileResult(false, existingNode.getId());
                     }
                 }
             } catch (Exception e) {
