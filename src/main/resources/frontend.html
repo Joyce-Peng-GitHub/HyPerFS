@@ -124,6 +124,7 @@
                     <td class="actions">
                         ${!file.isFolder ? `<button onclick="downloadFile(${file.id})">Download</button>` : ''}
                         <button onclick="moveNode(${file.id})">Move</button>
+                        <button onclick="renameNode(${file.id}, '${file.name}')">Rename</button>
                         <button onclick="deleteNode(${file.id})">Delete</button>
                     </td>
                 `;
@@ -208,6 +209,32 @@
                 throw new Error(await response.text());
             } catch (e) {
                 alert('Failed to move: ' + e.message);
+            }
+        }
+
+        async function renameNode(id, currentName) {
+            const newName = prompt("Enter new name:", currentName);
+            if (!newName || newName === currentName) return;
+            try {
+                const response = await fetch('/rename', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, name: newName })
+                });
+
+                if (response.ok) {
+                    refreshList();
+                    return;
+                }
+
+                if (response.status === 409) {
+                    alert("Name conflict! A file or folder with this name already exists.");
+                    return;
+                }
+
+                throw new Error(await response.text());
+            } catch (e) {
+                alert('Failed to rename: ' + e.message);
             }
         }
 

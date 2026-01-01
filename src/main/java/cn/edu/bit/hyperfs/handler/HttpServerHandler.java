@@ -36,6 +36,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private boolean isMoving = false;
     private StringBuilder moveJsonBuffer = new StringBuilder();
 
+    // For rename operation
+    private boolean isRenaming = false;
+    private StringBuilder renameJsonBuffer = new StringBuilder();
+
     public HttpServerHandler() {
         super();
     }
@@ -85,6 +89,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             } else if ("/move".equals(path)) {
                 isMoving = true;
                 moveJsonBuffer.setLength(0);
+            } else if ("/rename".equals(path)) {
+                isRenaming = true;
+                renameJsonBuffer.setLength(0);
             } else {
                 sendError(ctx, HttpResponseStatus.NOT_FOUND);
             }
@@ -109,6 +116,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 handleMoveJson(ctx);
                 isMoving = false;
                 moveJsonBuffer.setLength(0);
+            }
+        } else if (isRenaming) {
+            renameJsonBuffer.append(content.content().toString(StandardCharsets.UTF_8));
+            if (content instanceof LastHttpContent) {
+                handleRenameJson(ctx);
+                isRenaming = false;
+                renameJsonBuffer.setLength(0);
             }
         }
     }
@@ -222,6 +236,30 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
         } catch (Exception e) {
             logger.error("Move failed", e);
+            sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    private void handleRenameJson(ChannelHandlerContext ctx) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode node = mapper.readTree(renameJsonBuffer.toString());
+
+            if (!node.has("id") || !node.has("name")) {
+                sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Missing id or name");
+                return;
+            }
+
+            long id = node.get("id").asLong();
+            String name = node.get("name").asText();
+
+            logger.info("Handling rename request: id={}, name={}", id, name);
+            fileService.renameNode(id, name);
+            sendResponse(ctx, HttpResponseStatus.OK, "Rename successful");
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+            sendError(ctx, HttpResponseStatus.CONFLICT, e.getMessage());
+        } catch (Exception e) {
+            logger.error("Rename failed", e);
             sendError(ctx, HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
         }
     }

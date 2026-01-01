@@ -114,4 +114,9 @@ public class FileService {
         logger.info("Moving node: id={}, targetParentId={}, strategy={}", id, targetParentId, strategy);
         databaseService.moveNode(id, targetParentId, strategy);
     }
+
+    public void renameNode(long id, String newName) throws Exception {
+        logger.info("Renaming node: id={}, newName={}", id, newName);
+        databaseService.renameNode(id, newName);
+    }
 }

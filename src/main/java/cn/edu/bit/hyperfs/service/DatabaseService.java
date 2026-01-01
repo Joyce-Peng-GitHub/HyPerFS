@@ -4,6 +4,7 @@ import cn.edu.bit.hyperfs.db.*;
 import cn.edu.bit.hyperfs.entity.FileMetaEntity;
 import cn.edu.bit.hyperfs.entity.FileStorageEntity;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 
@@ -340,6 +341,35 @@ public class DatabaseService {
 
                 // 5. Execute Move
                 fileMetaDao.updateParentIdAndName(connection, id, targetParentId, finalName);
+
+                connection.commit();
+            } catch (Exception e) {
+                connection.rollback();
+                throw e;
+            }
+        }
+    }
+
+    public void renameNode(long id, String newName) throws SQLException, MoveException {
+        try (Connection connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                FileMetaEntity node = fileMetaDao.getById(connection, id);
+                if (node == null) {
+                    throw new MoveException("Node not found");
+                }
+
+                if (node.getName().equals(newName)) {
+                    return; // No change
+                }
+
+                // Check for conflict
+                FileMetaEntity conflict = fileMetaDao.getByParentIdAndName(connection, node.getParentId(), newName);
+                if (conflict != null) {
+                    throw new FileConflictException("File with the same name already exists.");
+                }
+
+                fileMetaDao.updateParentIdAndName(connection, id, node.getParentId(), newName);
 
                 connection.commit();
             } catch (Exception e) {
