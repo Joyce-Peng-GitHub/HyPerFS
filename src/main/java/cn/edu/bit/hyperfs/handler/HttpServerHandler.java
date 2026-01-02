@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private static final Logger logger = LoggerFactory.getLogger(HttpServerHandler.class);
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static final String DEFAULT_DATA_DIRECTORY = "./data/";
     public static final String DEFAULT_TMP_DIRECTORY = "./tmp/";
@@ -142,7 +143,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private void handleList(ChannelHandlerContext context, QueryStringDecoder queryStringDecoder) throws Exception {
         var parentId = getLongParam(queryStringDecoder, "parentId", 0);
         List<FileMetaEntity> list = fileService.list(parentId);
-        var objectMapper = new ObjectMapper();
         var json = objectMapper.writeValueAsString(list);
         sendResponse(context, HttpResponseStatus.OK, json, "application/json");
     }
@@ -231,7 +231,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
 
     private void handleMoveJson(ChannelHandlerContext context) {
         try {
-            var objectMapper = new ObjectMapper();
             var jsonNode = objectMapper.readTree(moveJsonBuffer.toString());
             // 安全解析，包含默认值和检查
             if (!jsonNode.has("id") || !jsonNode.has("targetParentId")) {
@@ -256,7 +255,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
 
     private void handleRenameJson(ChannelHandlerContext context) {
         try {
-            var objectMapper = new ObjectMapper();
             var jsonNode = objectMapper.readTree(renameJsonBuffer.toString());
 
             if (!jsonNode.has("id") || !jsonNode.has("name")) {
@@ -280,7 +278,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
 
     private void handleCopyJson(ChannelHandlerContext context) {
         try {
-            var objectMapper = new ObjectMapper();
             var jsonNode = objectMapper.readTree(copyJsonBuffer.toString());
 
             if (!jsonNode.has("id") || !jsonNode.has("targetParentId")) {
