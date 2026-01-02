@@ -216,4 +216,91 @@ public class FileService {
         logger.info("Copying node: id={}, targetParentId={}, strategy={}", id, targetParentId, strategy);
         databaseService.copyNode(id, targetParentId, strategy);
     }
+
+    /**
+     * 根据路径解析文件元数据
+     * 
+     * 详细描述：
+     * 将路径字符串（如 /folder/file.txt）解析为文件元数据对象。
+     * 从根节点开始逐层查找。
+     *
+     * @param path 文件路径
+     * @return 对应的文件元数据
+     * @throws java.io.FileNotFoundException 如果路径不存在
+     * @throws Exception                     数据库查询错误
+     */
+    public FileMetaEntity resolvePath(String path) throws Exception {
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            // 根路径特殊处理，返回一个虚拟的根节点元数据
+            return new FileMetaEntity(0, -1, "/", 1, null, 0, 0, 0);
+        }
+
+        long currentParentId = 0;
+        FileMetaEntity currentMeta = null;
+
+        // 移除开头的斜杠并分割
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        // 如果路径以斜杠结尾，也要移除（WebDAV 客户端可能会发送 /folder/）
+        if (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        String[] components = path.split("/");
+
+        for (String component : components) {
+            if (component.isEmpty()) {
+                continue;
+            }
+
+            var children = databaseService.getList(currentParentId);
+            boolean found = false;
+            for (var meta : children) {
+                if (meta.getName().equals(component)) {
+                    currentMeta = meta;
+                    currentParentId = meta.getId();
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                throw new java.io.FileNotFoundException("Path not found: " + path);
+            }
+        }
+
+        return currentMeta;
+    }
+
+    /**
+     * 根据路径创建文件夹
+     * 
+     * 详细描述：
+     * 解析路径并在指定位置创建文件夹。
+     * 
+     * @param path 文件夹完整路径
+     * @throws Exception 创建失败
+     */
+    public void createDirectoryByPath(String path) throws Exception {
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            throw new IllegalArgumentException("Invalid path for directory creation");
+        }
+
+        // 移除末尾斜杠
+        if (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        int lastSlashIndex = path.lastIndexOf('/');
+        String parentPath = (lastSlashIndex > 0) ? path.substring(0, lastSlashIndex) : "/";
+        String folderName = path.substring(lastSlashIndex + 1);
+
+        var parentMeta = resolvePath(parentPath);
+        if (parentMeta.getIsFolder() != 1) {
+            throw new IllegalArgumentException("Parent path is not a directory");
+        }
+
+        createFolder(parentMeta.getId(), folderName);
+    }
 }

@@ -36,6 +36,9 @@ public class HyPerFS {
                         protected void initChannel(SocketChannel socketChannel) {
                             ChannelPipeline channelPipeline = socketChannel.pipeline();
                             channelPipeline.addLast(new HttpServerCodec()); // HTTP 编解码器
+                            channelPipeline.addLast(new io.netty.handler.codec.http.HttpServerExpectContinueHandler()); // 处理
+                                                                                                                        // Expect:
+                                                                                                                        // 100-continue
                             channelPipeline.addLast(new ChunkedWriteHandler()); // 支持异步发送大的码流
                             channelPipeline.addLast(businessGroup, new HttpServerHandler()); // 业务逻辑处理
                         }
