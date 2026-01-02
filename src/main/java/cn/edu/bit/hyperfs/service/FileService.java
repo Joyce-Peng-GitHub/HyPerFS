@@ -136,7 +136,8 @@ public class FileService {
         }
 
         // 使用 DefaultFileRegion 实现零拷贝
-        return new FileDownloadResource(new DefaultFileRegion(file, startRange, actualLength), fileMeta.getName());
+        return new FileDownloadResource(new DefaultFileRegion(file, startRange, actualLength), fileMeta.getName(),
+                fileLength, file);
     }
 
     /**

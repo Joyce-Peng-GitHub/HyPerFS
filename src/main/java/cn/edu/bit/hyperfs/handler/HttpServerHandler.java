@@ -157,29 +157,64 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
 
         try {
-            // 解析Range头，支持断点续传
-            // 简单处理，暂不支持复杂的Range
+            // 获取全量资源以确认文件存在并获取总大小
             var downloadResource = fileService.startDownload(id, 0, Long.MAX_VALUE);
-            var region = downloadResource.region();
+            var file = downloadResource.file();
+            var totalLength = downloadResource.totalLength();
             var filename = downloadResource.filename();
-            // 对文件名进行URL编码以支持特殊字符
-            var encodedFilename = java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
 
-            var response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-            response.headers().set(HttpHeaderNames.CONTENT_LENGTH, region.count());
+            // 解析 Range 头
+            var range = parseRange(request.headers().get(HttpHeaderNames.RANGE), totalLength);
+
+            // 校验 Range 有效性
+            if (range.isPartial()) {
+                if (range.start() < 0 || range.end() >= totalLength || range.start() > range.end()) {
+                    // Range 不满足，释放并返回 416
+                    downloadResource.region().release();
+                    var response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
+                            HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE);
+                    response.headers().set(HttpHeaderNames.CONTENT_RANGE, "bytes */" + totalLength);
+                    context.writeAndFlush(response);
+                    return;
+                }
+            }
+
+            // 根据需要调整下载区域
+            long contentLength = range.end() - range.start() + 1;
+            DefaultFileRegion finalRegion;
+            if (range.isPartial()) {
+                // 释放原始全量资源，创建新的部分资源
+                downloadResource.region().release();
+                finalRegion = new DefaultFileRegion(file, range.start(), contentLength);
+            } else {
+                finalRegion = downloadResource.region();
+            }
+
+            // 构建 HTTP 响应
+            var status = range.isPartial() ? HttpResponseStatus.PARTIAL_CONTENT : HttpResponseStatus.OK;
+            var response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+            response.headers().set(HttpHeaderNames.CONTENT_LENGTH, contentLength);
             response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
+            response.headers().set(HttpHeaderNames.ACCEPT_RANGES, "bytes");
+
+            // URL 编码文件名
+            var encodedFilename = java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
             response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION,
                     "attachment; filename*=UTF-8''" + encodedFilename);
+
+            if (range.isPartial()) {
+                response.headers().set(HttpHeaderNames.CONTENT_RANGE,
+                        "bytes " + range.start() + "-" + range.end() + "/" + totalLength);
+            }
 
             if (HttpUtil.isKeepAlive(request)) {
                 response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
             }
 
             context.write(response);
-            context.writeAndFlush(region, context.newProgressivePromise());
-            // 最后写一个LastHttpContent
-            var future = context.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-            // 如果不是keep-alive，关闭连接
+            var future = context.writeAndFlush(finalRegion, context.newProgressivePromise());
+
+            // 如果非 Keep-Alive 则关闭连接
             if (!HttpUtil.isKeepAlive(request)) {
                 future.addListener(ChannelFutureListener.CLOSE);
             }
@@ -188,6 +223,44 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             logger.error("Download failed", exception);
             sendError(context, HttpResponseStatus.NOT_FOUND, exception.getMessage());
         }
+    }
+
+    /**
+     * 解析 Range 头
+     */
+    private Range parseRange(String rangeHeader, long totalLength) {
+        long start = 0;
+        long end = totalLength - 1;
+        boolean isPartial = false;
+
+        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+            try {
+                var rangeValue = rangeHeader.substring(6).trim();
+                if (rangeValue.startsWith("-")) {
+                    // bytes=-y (最后 y 个字节)
+                    var suffixLength = Long.parseLong(rangeValue.substring(1));
+                    start = Math.max(0, totalLength - suffixLength);
+                } else {
+                    // bytes=x-y 或 bytes=x-
+                    var parts = rangeValue.split("-");
+                    start = Long.parseLong(parts[0]);
+                    if (parts.length > 1 && !parts[1].isEmpty()) {
+                        end = Long.parseLong(parts[1]);
+                    }
+                }
+                isPartial = true;
+            } catch (NumberFormatException exception) {
+                // 忽略格式错误，降级为普通下载
+                logger.warn("Invalid range header: {}", rangeHeader);
+                isPartial = false;
+                start = 0;
+                end = totalLength - 1;
+            }
+        }
+        return new Range(start, end, isPartial);
+    }
+
+    private record Range(long start, long end, boolean isPartial) {
     }
 
     private void handleUploadStart(ChannelHandlerContext context, QueryStringDecoder queryStringDecoder)
