@@ -63,6 +63,21 @@ public class DatabaseFactory {
 		return dataSource;
 	}
 
+	/**
+	 * 关闭数据库连接池
+	 * 
+	 * 详细描述：
+	 * 安全关闭 HikariDataSource 连接池，确保所有活动连接被正确返回，
+	 * 待处理的事务被完成，防止数据损坏。
+	 */
+	public void shutdown() {
+		if (dataSource != null && !dataSource.isClosed()) {
+			logger.info("Shutting down database connection pool...");
+			dataSource.close();
+			logger.info("Database connection pool closed successfully");
+		}
+	}
+
 	private void ensureDatabaseDirectoryExists() {
 		var databaseFile = new File(DATABASE_PATH);
 		var parentDirectory = databaseFile.getParentFile();

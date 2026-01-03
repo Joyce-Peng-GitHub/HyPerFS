@@ -1,7 +1,9 @@
 package cn.edu.bit.hyperfs.server;
 
+import cn.edu.bit.hyperfs.db.DatabaseFactory;
 import cn.edu.bit.hyperfs.handler.HttpServerHandler;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -32,6 +34,9 @@ public class HyPerFS {
         // 使用 DefaultEventExecutorGroup 处理阻塞业务逻辑，线程数设置为 32
         EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(32);
 
+        // 预初始化数据库，确保在 shutdown hook 可以关闭它
+        DatabaseFactory.getInstance();
+
         try {
             var serverBootstrap = new ServerBootstrap();
             serverBootstrap.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
@@ -48,20 +53,47 @@ public class HyPerFS {
                         }
                     });
 
-            logger.info("HyPerFS Server started on port {}", port);
-            System.out.println("HyPerFS Server started on port " + port);
-
             ChannelFuture channelFuture = serverBootstrap.bind(port).sync(); // 绑定端口并同步等待
-            channelFuture.channel().closeFuture().sync();
+            Channel serverChannel = channelFuture.channel();
+
+            // 注册 JVM shutdown hook，处理 Ctrl+C 信号
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                logger.info("Received shutdown signal, initiating graceful shutdown...");
+
+                // 关闭服务器通道，停止接收新连接
+                if (serverChannel.isOpen()) {
+                    serverChannel.close().syncUninterruptibly();
+                }
+
+                // 优雅关闭 Netty 线程组
+                logger.info("Shutting down Netty event loop groups...");
+                bossGroup.shutdownGracefully().syncUninterruptibly();
+                workerGroup.shutdownGracefully().syncUninterruptibly();
+                businessGroup.shutdownGracefully().syncUninterruptibly();
+                logger.info("Netty event loop groups shut down");
+
+                // 关闭数据库连接池
+                DatabaseFactory.getInstance().shutdown();
+
+                logger.info("HyPerFS server gracefully stopped");
+            }, "shutdown-hook"));
+
+            logger.info("HyPerFS Server started on port {}", port);
+
+            serverChannel.closeFuture().sync();
         } catch (Exception exception) {
             logger.error("Server start failed", exception);
             throw exception;
         } finally {
-            logger.info("Stopping HyPerFS server...");
-            bossGroup.shutdownGracefully();
-            workerGroup.shutdownGracefully();
-            businessGroup.shutdownGracefully();
-            logger.info("HyPerFS server stopped");
+            // 如果不是通过 shutdown hook 关闭的，也需要清理资源
+            if (!bossGroup.isShuttingDown()) {
+                logger.info("Stopping HyPerFS server...");
+                bossGroup.shutdownGracefully();
+                workerGroup.shutdownGracefully();
+                businessGroup.shutdownGracefully();
+                DatabaseFactory.getInstance().shutdown();
+                logger.info("HyPerFS server stopped");
+            }
         }
     }
 
