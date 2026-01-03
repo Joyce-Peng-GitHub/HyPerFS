@@ -1,221 +1,1226 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HyPerFS Web Client</title>
     <style>
+        :root {
+            /* Light Mode Colors */
+            --bg-color: #f0f4f8;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.5);
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --accent-color: #6366f1;
+            /* Indigo */
+            --accent-hover: #4f46e5;
+            --danger-color: #ef4444;
+            --shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+            --modal-overlay: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] {
+            /* Dark Mode Colors */
+            --bg-color: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-color: #818cf8;
+            --accent-hover: #6366f1;
+            --danger-color: #f87171;
+            --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            --modal-overlay: rgba(0, 0, 0, 0.6);
+        }
+
+        * {
+            box-sizing: border-box;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+
         body {
-            font-family: sans-serif;
-            margin: 20px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
         }
 
-        h1 {
-            color: #333;
+        [data-theme="light"] body {
+            background-image:
+                radial-gradient(at 40% 20%, hsla(28, 100%, 74%, 1) 0, transparent 50%),
+                radial-gradient(at 80% 0%, hsla(189, 100%, 56%, 1) 0, transparent 50%),
+                radial-gradient(at 0% 50%, hsla(355, 100%, 93%, 1) 0, transparent 50%);
         }
 
-        #file-list {
-            margin-top: 20px;
-            border-collapse: collapse;
-            width: 100%;
+        /* Glassmorphism Utilities */
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
         }
 
-        #file-list th,
-        #file-list td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
+        /* Layout */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        #file-list th {
-            background-color: #f2f2f2;
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
         }
 
-        .folder {
-            color: blue;
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
             cursor: pointer;
+            font-size: 1.2rem;
+            color: var(--text-primary);
+            padding: 8px;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: rgba(128, 128, 128, 0.1);
+        }
+
+        /* Toolbar & Breadcrumbs */
+        .toolbar-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .breadcrumbs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .breadcrumb-item {
+            cursor: pointer;
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        .breadcrumb-item:hover {
+            color: var(--accent-color);
             text-decoration: underline;
         }
 
-        .actions button {
-            margin-right: 5px;
+        .breadcrumb-item.active {
+            color: var(--text-primary);
+            font-weight: 600;
+            cursor: default;
+            text-decoration: none;
         }
 
-        #upload-area,
-        #controls {
+        .separator {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: transform 0.1s, opacity 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background-color: rgba(128, 128, 128, 0.1);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(128, 128, 128, 0.2);
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            filter: brightness(0.9);
+        }
+
+        /* File List */
+        .file-list-container {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background: var(--glass-bg);
+            /* Need solid/glass background for sticky header */
+            backdrop-filter: blur(12px);
+            z-index: 10;
+        }
+
+        th {
+            padding: 15px 20px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--glass-border);
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            color: var(--accent-color);
+        }
+
+        td {
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: rgba(128, 128, 128, 0.05);
+        }
+
+        .file-name {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+
+        .file-icon {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .file-link {
+            cursor: pointer;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .file-link:hover {
+            color: var(--accent-color);
+        }
+
+        .action-menu-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            font-weight: bold;
+        }
+
+        .action-menu-btn:hover {
+            background-color: rgba(128, 128, 128, 0.1);
+            color: var(--text-primary);
+        }
+
+        .sort-indicator {
+            display: inline-block;
+            width: 15px;
+            text-align: center;
+        }
+
+        /* Context Menu (Custom) */
+        .context-menu {
+            position: absolute;
+            background: var(--bg-color);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 5px 0;
+            display: none;
+            z-index: 100;
+            min-width: 150px;
+        }
+
+        .context-menu-item {
+            padding: 8px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .context-menu-item:hover {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .context-menu-item.danger {
+            color: var(--danger-color);
+        }
+
+        .context-menu-item.danger:hover {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--modal-overlay);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal {
+            width: 90%;
+            max-width: 400px;
+            padding: 25px;
+        }
+
+        .modal h3 {
+            margin-top: 0;
             margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .form-input {
+            width: 100%;
             padding: 10px;
-            background: #f9f9f9;
-            border: 1px solid #ddd;
+            border-radius: 8px;
+            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            outline: none;
+        }
+
+        .form-input:focus {
+            border-color: var(--accent-color);
+        }
+
+        /* Folder Picker Tree */
+        .folder-tree {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 10px;
+            background: rgba(128, 128, 128, 0.05);
+        }
+
+        .tree-node {
+            padding: 2px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            /* gap: 5px; */
+            user-select: none;
+        }
+
+        .tree-row {
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+        }
+
+        .tree-row:hover {
+            background-color: rgba(128, 128, 128, 0.1);
+        }
+
+        .tree-row.selected {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .tree-toggle {
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-family: monospace;
+            cursor: pointer;
+            margin-right: 2px;
+            color: var(--text-secondary);
+            font-weight: bold;
+        }
+
+        .tree-toggle:hover {
+            color: var(--text-primary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        /* Mobile specific */
+        @media (max-width: 768px) {
+            .file-list-container {
+                overflow-x: auto;
+            }
+
+            .toolbar-area {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .actions {
+                justify-content: space-between;
+            }
         }
     </style>
 </head>
 
 <body>
-    <h1>HyPerFS Web Client</h1>
+    <div class="container">
+        <!-- Header -->
+        <header class="glass">
+            <div class="logo">
+                <span style="font-size: 1.8rem;">⚡</span> HyPerFS
+            </div>
+            <div class="header-controls">
+                <button class="icon-btn" onclick="toggleLanguage()" id="lang-btn" title="Switch Language">
+                    中
+                </button>
+                <button class="icon-btn" onclick="toggleTheme()" id="theme-btn" title="Toggle Theme">
+                    🌙
+                </button>
+            </div>
+        </header>
 
-    <div id="controls">
-        <button onclick="refreshList()">Refresh</button>
-        <button onclick="goUp()">Up Directory</button>
-        <button onclick="createFolder()">New Folder</button>
-        <span>Current Parent ID: <span id="current-parent-id">0</span></span>
+        <!-- Main Content -->
+        <main class="glass file-list-container">
+            <!-- Toolbar -->
+            <div class="toolbar-area">
+                <div class="breadcrumbs" id="breadcrumbs">
+                    <!-- JS Injected -->
+                </div>
+                <div class="actions">
+                    <button class="btn btn-secondary" onclick="refreshList()">
+                        <span id="txt-refresh">Refresh</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="openCreateFolderModal()">
+                        <span id="txt-new-folder">New Folder</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="triggerUpload()">
+                        <span id="txt-upload">Upload</span>
+                    </button>
+                    <!-- Hidden File Input -->
+                    <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect()">
+                </div>
+            </div>
+
+            <!-- File Table -->
+            <table>
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('name')" style="width: 45%;">
+                            <span id="th-name">Name</span> <span id="sort-ind-name" class="sort-indicator"></span>
+                        </th>
+                        <th onclick="sortTable('size')" style="width: 15%;">
+                            <span id="th-size">Size</span> <span id="sort-ind-size" class="sort-indicator"></span>
+                        </th>
+                        <th onclick="sortTable('date')" style="width: 25%;">
+                            <span id="th-date">Date</span> <span id="sort-ind-date" class="sort-indicator"></span>
+                        </th>
+                        <th onclick="sortTable('downloads')" style="width: 10%;">
+                            <span id="th-downloads">Downloads</span> <span id="sort-ind-downloads"
+                                class="sort-indicator"></span>
+                        </th>
+                        <th style="width: 5%;"></th>
+                    </tr>
+                </thead>
+                <tbody id="file-list-body">
+                    <!-- JS Injected -->
+                </tbody>
+            </table>
+            <div id="empty-state" class="empty-state" style="display: none;">
+                <span id="txt-empty">Folder is empty</span>
+            </div>
+        </main>
     </div>
 
-    <div id="upload-area">
-        <h3>Upload File</h3>
-        <input type="file" id="file-input">
-        <button onclick="uploadFile()">Upload</button>
+    <!-- Modals -->
+
+    <!-- Generic Input Modal (Create Folder / Rename) -->
+    <div id="input-modal" class="modal-overlay">
+        <div class="modal glass">
+            <h3 id="modal-title">Title</h3>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" id="modal-label">Name</label>
+                    <input type="text" id="modal-input" class="form-input" autofocus>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('input-modal')">Cancel</button>
+                <button class="btn btn-primary" id="modal-confirm-btn">Confirm</button>
+            </div>
+        </div>
     </div>
 
-    <table id="file-list">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Size</th>
-                <th>Downloads</th>
-                <th>Upload Time</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Files will be listed here -->
-        </tbody>
-    </table>
+    <!-- Conflict Options Modal -->
+    <div id="conflict-modal" class="modal-overlay">
+        <div class="modal glass">
+            <h3 id="conflict-title">Conflict</h3>
+            <div class="modal-body">
+                <p id="conflict-msg">File already exists.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('conflict-modal')">Cancel</button>
+                <button class="btn btn-primary" id="conflict-rename-btn">Rename (Auto)</button>
+                <button class="btn btn-danger" id="conflict-overwrite-btn">Overwrite</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Conflict Warning Modal (Simplified for Upload) -->
+    <div id="upload-warning-modal" class="modal-overlay">
+        <div class="modal glass">
+            <h3>Upload Conflict</h3>
+            <div class="modal-body">
+                <p>A file with this name already exists in the current folder.</p>
+                <p><strong>Overwrite it?</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('upload-warning-modal')">Cancel</button>
+                <button class="btn btn-danger" id="upload-overwrite-btn">Overwrite</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folder Picker Modal (Move / Copy) -->
+    <div id="picker-modal" class="modal-overlay">
+        <div class="modal glass">
+            <h3 id="picker-title">Select Destination</h3>
+            <div class="modal-body">
+                <div id="folder-tree" class="folder-tree">
+                    <!-- JS Generated Tree -->
+                </div>
+                <div style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">
+                    Selected: <span id="selected-folder-path">None</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('picker-modal')">Cancel</button>
+                <button class="btn btn-primary" id="picker-confirm-btn" disabled>Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="context-menu glass">
+        <div class="context-menu-item" onclick="handleContextAction('download')">⬇ <span class="ctx-text"
+                data-key="download">Download</span></div>
+        <div class="context-menu-item" onclick="handleContextAction('rename')">✏ <span class="ctx-text"
+                data-key="rename">Rename</span></div>
+        <div class="context-menu-item" onclick="handleContextAction('move')">↗ <span class="ctx-text"
+                data-key="move">Move</span></div>
+        <div class="context-menu-item" onclick="handleContextAction('copy')">📋 <span class="ctx-text"
+                data-key="copy">Copy</span></div>
+        <div class="context-menu-item danger" onclick="handleContextAction('delete')">🗑 <span class="ctx-text"
+                data-key="delete">Delete</span></div>
+    </div>
 
     <script>
+        // --- State ---
         let currentParentId = 0;
-        const parentHistory = [];
+        let pathStack = [{ id: 0, name: 'Home' }]; // {id, name}
+        let currentFiles = [];
+        let currentLang = 'zh'; // 'en' or 'zh'
+        let contextTarget = null; // {id, name, isFolder}
+
+        // Sorting State
+        let currentSortKey = 'name';
+        let sortDir = 1; // 1: asc, -1: desc
+
+        // --- i18n ---
+        const i18n = {
+            en: {
+                refresh: "Refresh",
+                newFolder: "New Folder",
+                upload: "Upload",
+                name: "Name",
+                size: "Size",
+                date: "Date",
+                downloads: "Downloads",
+                empty: "Folder is empty",
+                download: "Download",
+                rename: "Rename",
+                move: "Move",
+                copy: "Copy",
+                delete: "Delete",
+                cancel: "Cancel",
+                confirm: "Confirm",
+                createFolderTitle: "Create New Folder",
+                folderName: "Folder Name",
+                renameTitle: "Rename Item",
+                newName: "New Name",
+                uploadTitle: "Upload File",
+                fileName: "File Name",
+                moveTitle: "Move to...",
+                copyTitle: "Copy to...",
+                selectDest: "Select Destination",
+                deleteConfirm: "Are you sure you want to delete this item?",
+                error: "Error",
+                success: "Success",
+                conflictTitle: "File Conflict",
+                conflictMsg: "Item already exists at destination. Choose action:",
+                renameAuto: "Rename (Auto)",
+                overwrite: "Overwrite"
+            },
+            zh: {
+                refresh: "刷新",
+                newFolder: "新建文件夹",
+                upload: "上传文件",
+                name: "名称",
+                size: "大小",
+                date: "修改日期",
+                downloads: "下载次数",
+                empty: "文件夹为空",
+                download: "下载",
+                rename: "重命名",
+                move: "移动",
+                copy: "复制",
+                delete: "删除",
+                cancel: "取消",
+                confirm: "确定",
+                createFolderTitle: "新建文件夹",
+                folderName: "文件夹名称",
+                renameTitle: "重命名项目",
+                newName: "新名称",
+                uploadTitle: "上传文件确认",
+                fileName: "文件名",
+                moveTitle: "移动到...",
+                copyTitle: "复制到...",
+                selectDest: "选择目标文件夹",
+                deleteConfirm: "确定要删除此项目吗？",
+                error: "错误",
+                success: "成功",
+                conflictTitle: "文件冲突",
+                conflictMsg: "目标位置已存在同名项目。请选择：",
+                renameAuto: "重命名(自动)",
+                overwrite: "覆盖"
+            }
+        };
+
+        // --- Init ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Theme Init
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('theme-btn').textContent = savedTheme === 'light' ? '🌙' : '☀️';
+
+            // Click outside to close context menu
+            document.addEventListener('click', (e) => {
+                const menu = document.getElementById('context-menu');
+                if (menu.style.display === 'block') {
+                    menu.style.display = 'none';
+                }
+            });
+
+            refreshList();
+            updateLanguageUI();
+        });
+
+        // --- UI Functions ---
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            document.getElementById('theme-btn').textContent = next === 'light' ? '🌙' : '☀️';
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            document.getElementById('lang-btn').textContent = currentLang === 'zh' ? 'En' : '中';
+            updateLanguageUI();
+        }
+
+        function updateLanguageUI() {
+            const t = i18n[currentLang];
+            document.getElementById('txt-refresh').textContent = t.refresh;
+            document.getElementById('txt-new-folder').textContent = t.newFolder;
+            document.getElementById('txt-upload').textContent = t.upload;
+            document.getElementById('th-name').textContent = t.name;
+            document.getElementById('th-size').textContent = t.size;
+            document.getElementById('th-date').textContent = t.date;
+            document.getElementById('th-downloads').textContent = t.downloads;
+            document.getElementById('txt-empty').textContent = t.empty;
+
+            document.getElementById('conflict-title').textContent = t.conflictTitle;
+            document.getElementById('conflict-msg').textContent = t.conflictMsg;
+            document.getElementById('conflict-rename-btn').textContent = t.renameAuto;
+            document.getElementById('conflict-overwrite-btn').textContent = t.overwrite;
+
+            // Update Context Menu
+            document.querySelectorAll('.ctx-text').forEach(el => {
+                const key = el.getAttribute('data-key');
+                if (t[key]) el.textContent = t[key];
+            });
+
+            // Update Breadcrumbs
+            renderBreadcrumbs();
+        }
+
+        function updateSortIndicators() {
+            // Clear all
+            ['name', 'size', 'date', 'downloads'].forEach(k => {
+                const el = document.getElementById('sort-ind-' + k);
+                if (el) el.textContent = '';
+            });
+            // Set current
+            const arrow = sortDir === 1 ? '↑' : '↓';
+            const el = document.getElementById('sort-ind-' + currentSortKey);
+            if (el) el.textContent = arrow;
+        }
+
+        // --- Data & Rendering ---
 
         async function refreshList() {
             try {
-                const response = await fetch(`/list?parentId=${currentParentId}`);
-                if (!response.ok) throw new Error(await response.text());
-                const files = await response.json();
-                renderList(files);
-                document.getElementById('current-parent-id').textContent = currentParentId;
+                const res = await fetch(`/list?parentId=${currentParentId}`);
+                if (!res.ok) throw new Error(await res.text());
+                currentFiles = await res.json();
+                applySorting(); // Sort before render
+                renderList(currentFiles);
             } catch (e) {
-                alert('Failed to load list: ' + e.message);
+                console.error(e);
+                alert(getText('error') + ": " + e.message);
             }
         }
 
         function renderList(files) {
-            const tbody = document.querySelector('#file-list tbody');
+            const tbody = document.getElementById('file-list-body');
             tbody.innerHTML = '';
+
+            if (files.length === 0) {
+                document.getElementById('empty-state').style.display = 'block';
+            } else {
+                document.getElementById('empty-state').style.display = 'none';
+            }
+
             files.forEach(file => {
                 const tr = document.createElement('tr');
+                tr.onclick = (e) => {
+                    // Prevent row click if clicking action menu
+                    if (e.target.closest('.action-menu-btn')) return;
+                    // If folder, navigate
+                    if (file.isFolder) enterFolder(file.id, file.name);
+                };
 
-                const type = file.isFolder ? 'Folder' : 'File';
-                const nameContent = file.isFolder
-                    ? `<span class="folder" onclick="enterFolder(${file.id})">${file.name}</span>`
-                    : file.name;
+                // Right click
+                tr.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    showContextMenu(e, file);
+                };
 
-                const date = new Date(file.uploadTime).toLocaleString();
+                const icon = file.isFolder ? '📁' : getFileIcon(file.name);
+                const size = file.isFolder ? '-' : formatSize(file.size);
+                const downloads = file.isFolder ? '-' : file.downloadCount;
+                const date = new Date(file.uploadTime).toLocaleString(currentLang === 'zh' ? 'zh-CN' : 'en-US');
 
                 tr.innerHTML = `
-                    <td>${file.id}</td>
-                    <td>${nameContent}</td>
-                    <td>${type}</td>
-                    <td>${file.size}</td>
-                    <td>${file.downloadCount}</td>
+                    <td>
+                        <div class="file-name">
+                            <span class="file-icon">${icon}</span>
+                            <span class="${file.isFolder ? 'file-link' : ''}">${file.name}</span>
+                        </div>
+                    </td>
+                    <td>${size}</td>
                     <td>${date}</td>
-                    <td class="actions">
-                        ${!file.isFolder ? `<button onclick="downloadFile(${file.id})">Download</button>` : ''}
-                        <button onclick="moveNode(${file.id})">Move</button>
-                        <button onclick="copyNode(${file.id})">Copy</button>
-                        <button onclick="renameNode(${file.id}, '${file.name}')">Rename</button>
-                        <button onclick="deleteNode(${file.id})">Delete</button>
+                    <td>${downloads}</td>
+                    <td style="text-align: right;">
+                        <button class="action-menu-btn" onclick="showContextMenu(event, {id: ${file.id}, name: '${file.name}', isFolder: ${file.isFolder}})">•••</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
+            renderBreadcrumbs();
         }
 
-        function enterFolder(id) {
-            parentHistory.push(currentParentId);
+        function renderBreadcrumbs() {
+            const container = document.getElementById('breadcrumbs');
+            container.innerHTML = '';
+
+            pathStack.forEach((item, index) => {
+                const isLast = index === pathStack.length - 1;
+
+                const span = document.createElement('span');
+                let displayName = item.name;
+                if (index === 0 && item.id === 0) {
+                    displayName = currentLang === 'zh' ? '首页' : 'Home';
+                }
+
+                span.textContent = displayName;
+                span.className = `breadcrumb-item ${isLast ? 'active' : ''}`;
+
+                if (!isLast) {
+                    span.onclick = () => navigateToBreadcrumb(index);
+                }
+
+                container.appendChild(span);
+
+                if (!isLast) {
+                    const sep = document.createElement('span');
+                    sep.className = 'separator';
+                    sep.textContent = '>';
+                    container.appendChild(sep);
+                }
+            });
+        }
+
+        function getFileIcon(name) {
+            const ext = name.split('.').pop().toLowerCase();
+            if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return '🖼️';
+            if (['mp4', 'avi', 'mov'].includes(ext)) return '🎬';
+            if (['mp3', 'wav'].includes(ext)) return '🎵';
+            if (['pdf'].includes(ext)) return '📄';
+            if (['zip', 'rar', '7z'].includes(ext)) return '📦';
+            if (['txt', 'md', 'json', 'xml'].includes(ext)) return '📝';
+            if (['exe', 'sh', 'bat'].includes(ext)) return '⚙️';
+            return '📄';
+        }
+
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // --- Navigation ---
+
+        function enterFolder(id, name) {
             currentParentId = id;
+            pathStack.push({ id, name });
             refreshList();
         }
 
-        function goUp() {
-            if (parentHistory.length > 0) {
-                currentParentId = parentHistory.pop();
-                refreshList();
-            } else {
-                currentParentId = 0;
-                refreshList();
-            }
+        function navigateToBreadcrumb(index) {
+            pathStack = pathStack.slice(0, index + 1);
+            currentParentId = pathStack[pathStack.length - 1].id;
+            refreshList();
         }
 
-        async function createFolder() {
-            const name = prompt("Enter folder name:");
-            if (!name) return;
-            try {
-                const response = await fetch(`/folder?parentId=${currentParentId}&name=${encodeURIComponent(name)}`, { method: 'POST' });
-                if (!response.ok) throw new Error(await response.text());
-                refreshList();
-            } catch (e) {
-                alert('Failed to create folder: ' + e.message);
-            }
+        // --- Actions ---
+
+        function triggerUpload() {
+            document.getElementById('file-input').click();
         }
 
-        async function deleteNode(id) {
-            if (!confirm("Are you sure you want to delete this item?")) return;
-            try {
-                const response = await fetch(`/delete?id=${id}`, { method: 'POST' });
-                if (!response.ok) throw new Error(await response.text());
-                refreshList();
-            } catch (e) {
-                alert('Failed to delete: ' + e.message);
-            }
-        }
+        function handleFileSelect() {
+            const input = document.getElementById('file-input');
+            const file = input.files[0];
+            if (!file) return;
 
-        async function moveNode(id) {
-            const targetParentIdStr = prompt("Enter target parent folder ID:");
-            if (targetParentIdStr === null) return;
-            const targetParentId = parseInt(targetParentIdStr);
-            if (isNaN(targetParentId)) {
-                alert("Invalid Parent ID");
-                return;
-            }
-            await doMove(id, targetParentId, 'FAIL');
-        }
+            // Check content conflict
+            const conflict = currentFiles.find(f => f.name === file.name);
+            if (conflict) {
+                // Open Warning Modal
+                const modal = document.getElementById('upload-warning-modal');
 
-        async function doMove(id, targetParentId, strategy) {
-            try {
-                const response = await fetch('/move', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, targetParentId, strategy })
-                });
-                if (response.ok) {
-                    refreshList();
-                    return;
-                }
+                // Bind overwrite button
+                document.getElementById('upload-overwrite-btn').onclick = () => {
+                    closeModal('upload-warning-modal');
+                    performUpload(file, file.name); // Proceed with overwrite
+                };
 
-                if (response.status === 409) {
-                    const choice = prompt("File exists! Type 'RENAME' to generate copy, 'OVERWRITE' to replace (files only), or Cancel.");
-                    if (choice) {
-                        const s = choice.toUpperCase();
-                        if (s === 'RENAME' || s === 'OVERWRITE') {
-                            await doMove(id, targetParentId, s);
-                            return;
-                        }
+                // If user wants to "Rename", they can just close and use the Rename flow of the OS dialog? 
+                // Or we can offer rename here? 
+                // Requirement: "Warning user... confirm or cancel".
+                // BUT, previously we had a Rename-on-Upload modal. We should integrate them.
+                // Actually, the previous 'handleFileSelect' opened 'showInputModal' to confirm name.
+                // Let's first check name, if conflict, show warning.
+                // Steps: Select -> Check Name -> Conflict? -> Warn -> (If Overwrite) -> Upload.
+                // OR: Select -> Show Name Input (User might change name) -> Check Conflict -> Warn -> Upload.
+                // Let's do the second one.
+
+                showInputModal(getText('uploadTitle'), getText('fileName'), file.name, (newName) => {
+                    // Check conflict with newName
+                    const exists = currentFiles.find(f => f.name === newName);
+                    if (exists) {
+                        // Show warning
+                        const wModal = document.getElementById('upload-warning-modal');
+                        document.getElementById('upload-overwrite-btn').onclick = () => {
+                            closeModal('upload-warning-modal');
+                            performUpload(file, newName);
+                        };
+                        openModal('upload-warning-modal');
+                    } else {
+                        performUpload(file, newName);
                     }
-                    return;
-                }
+                });
 
-                throw new Error(await response.text());
+            } else {
+                // No conflict with original name, but user might rename to a conflicting one.
+                showInputModal(getText('uploadTitle'), getText('fileName'), file.name, (newName) => {
+                    const exists = currentFiles.find(f => f.name === newName);
+                    if (exists) {
+                        const wModal = document.getElementById('upload-warning-modal');
+                        document.getElementById('upload-overwrite-btn').onclick = () => {
+                            closeModal('upload-warning-modal');
+                            performUpload(file, newName);
+                        };
+                        openModal('upload-warning-modal');
+                    } else {
+                        performUpload(file, newName);
+                    }
+                });
+            }
+
+            input.value = '';
+        }
+
+        async function performUpload(file, filename) {
+            try {
+                const res = await fetch(`/upload?parentId=${currentParentId}&filename=${encodeURIComponent(filename)}`, {
+                    method: 'POST',
+                    body: file
+                });
+                if (!res.ok) throw new Error(await res.text());
+                refreshList();
             } catch (e) {
-                alert('Failed to move: ' + e.message);
+                alert(getText('error') + ": " + e.message);
             }
         }
 
-        async function renameNode(id, currentName) {
-            const newName = prompt("Enter new name:", currentName);
-            if (!newName || newName === currentName) return;
+        function openCreateFolderModal() {
+            showInputModal(getText('createFolderTitle'), getText('folderName'), '', (name) => {
+                if (!name.trim()) return;
+                createFolder(name);
+            });
+        }
+
+        async function createFolder(name) {
+            try {
+                const res = await fetch(`/folder?parentId=${currentParentId}&name=${encodeURIComponent(name)}`, { method: 'POST' });
+                if (!res.ok) throw new Error(await res.text());
+                refreshList();
+            } catch (e) {
+                alert(getText('error') + ": " + e.message);
+            }
+        }
+
+        // --- Context Actions ---
+
+        function showContextMenu(e, file) {
+            e.stopPropagation();
+            contextTarget = file;
+            const menu = document.getElementById('context-menu');
+            menu.style.display = 'block';
+            menu.style.left = `${e.pageX}px`;
+            menu.style.top = `${e.pageY}px`;
+            if (e.pageX + 150 > window.innerWidth) {
+                menu.style.left = `${e.pageX - 150}px`;
+            }
+        }
+
+        function handleContextAction(action) {
+            if (!contextTarget) return;
+            const file = contextTarget;
+            const t = i18n[currentLang];
+
+            switch (action) {
+                case 'download':
+                    if (file.isFolder) return;
+                    window.location.href = `/download?id=${file.id}`;
+                    break;
+                case 'rename':
+                    showInputModal(getText('renameTitle'), getText('newName'), file.name, (newName) => {
+                        apiRename(file.id, newName);
+                    });
+                    break;
+                case 'delete':
+                    if (confirm(getText('deleteConfirm'))) {
+                        apiDelete(file.id);
+                    }
+                    break;
+                case 'move':
+                    openPickerModal(getText('moveTitle'), (targetId) => {
+                        apiMove(file.id, targetId, 'FAIL');
+                    });
+                    break;
+                case 'copy':
+                    openPickerModal(getText('copyTitle'), (targetId) => {
+                        apiCopy(file.id, targetId, 'FAIL');
+                    });
+                    break;
+            }
+            document.getElementById('context-menu').style.display = 'none';
+        }
+
+        // --- Generic Modals ---
+
+        let inputModalCallback = null;
+        function showInputModal(title, label, defaultValue, callback) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-label').textContent = label;
+            const input = document.getElementById('modal-input');
+            input.value = defaultValue;
+            inputModalCallback = callback;
+            openModal('input-modal');
+            input.focus();
+        }
+
+        document.getElementById('modal-confirm-btn').onclick = () => {
+            const val = document.getElementById('modal-input').value;
+            if (inputModalCallback) inputModalCallback(val);
+            closeModal('input-modal');
+        };
+
+        let pickerCallback = null;
+        let selectedFolderId = null;
+
+        async function openPickerModal(title, callback) {
+            document.getElementById('picker-title').textContent = title;
+            pickerCallback = callback;
+            selectedFolderId = null;
+            document.getElementById('picker-confirm-btn').disabled = true;
+            document.getElementById('selected-folder-path').textContent = 'None';
+
+            const treeContainer = document.getElementById('folder-tree');
+            treeContainer.innerHTML = '';
+
+            // Render Root
+            const rootNode = createTreeNode(0, 'Home', 0, '/');
+            // Auto expand root
+            treeContainer.appendChild(rootNode);
+            // Trigger expand on root
+            toggleNode(rootNode, 0, 0, '/');
+
+            openModal('picker-modal');
+        }
+
+        function createTreeNode(id, name, level, fullPath) {
+            const container = document.createElement('div');
+            container.className = 'tree-item-container';
+
+            // Row
+            const row = document.createElement('div');
+            row.className = 'tree-row';
+            row.style.paddingLeft = (level * 20 + 5) + 'px';
+
+            // Toggle Icon
+            const toggle = document.createElement('span');
+            toggle.className = 'tree-toggle';
+            toggle.textContent = '+'; // Default collapsed
+            toggle.onclick = (e) => {
+                e.stopPropagation();
+                toggleNode(container, id, level, fullPath);
+            };
+
+            const label = document.createElement('span');
+            label.textContent = '📁 ' + name;
+
+            row.appendChild(toggle);
+            row.appendChild(label);
+
+            row.onclick = () => selectFolder(id, row, fullPath);
+
+            // Children Container
+            const childrenDiv = document.createElement('div');
+            childrenDiv.className = 'tree-children';
+            childrenDiv.style.display = 'none'; // Hidden by default
+
+            container.appendChild(row);
+            container.appendChild(childrenDiv);
+
+            // Store metadata on container
+            container.dataset.id = id;
+            container.dataset.expanded = 'false';
+            container.dataset.loaded = 'false';
+
+            return container;
+        }
+
+        async function toggleNode(nodeContainer, id, level, parentPath) {
+            const childrenDiv = nodeContainer.querySelector('.tree-children');
+            const toggleBtn = nodeContainer.querySelector('.tree-toggle');
+            const isExpanded = nodeContainer.dataset.expanded === 'true';
+
+            if (isExpanded) {
+                // Collapse
+                childrenDiv.style.display = 'none';
+                nodeContainer.dataset.expanded = 'false';
+                toggleBtn.textContent = '+';
+            } else {
+                // Expand
+                // Check if loaded
+                if (nodeContainer.dataset.loaded === 'false') {
+                    // Load
+                    toggleBtn.textContent = '...';
+                    try {
+                        const res = await fetch(`/list?parentId=${id}`);
+                        const list = await res.json();
+                        const folders = list.filter(f => f.isFolder);
+
+                        childrenDiv.innerHTML = '';
+                        folders.forEach(f => {
+                            // Construct Path
+                            const currentPath = (parentPath === '/' ? '' : parentPath) + '/' + f.name;
+                            const childNode = createTreeNode(f.id, f.name, level + 1, currentPath);
+                            childrenDiv.appendChild(childNode);
+                        });
+
+                        nodeContainer.dataset.loaded = 'true';
+                    } catch (e) {
+                        toggleBtn.textContent = '!';
+                        return;
+                    }
+                }
+
+                childrenDiv.style.display = 'block';
+                nodeContainer.dataset.expanded = 'true';
+                toggleBtn.textContent = '-';
+            }
+        }
+
+        function selectFolder(id, rowDom, fullPath) {
+            selectedFolderId = id;
+            document.getElementById('selected-folder-path').textContent = fullPath; // Show Path
+            document.getElementById('picker-confirm-btn').disabled = false;
+
+            document.querySelectorAll('.tree-row').forEach(n => n.classList.remove('selected'));
+            rowDom.classList.add('selected');
+        }
+
+        document.getElementById('picker-confirm-btn').onclick = () => {
+            if (pickerCallback && selectedFolderId !== null) {
+                pickerCallback(selectedFolderId);
+            }
+            closeModal('picker-modal');
+        }
+
+        // --- API Helpers ---
+
+        async function apiDelete(id) {
+            try {
+                const res = await fetch(`/delete?id=${id}`, { method: 'POST' });
+                if (!res.ok) throw new Error(await res.text());
+                refreshList();
+            } catch (e) { alert(getText('error') + ": " + e.message); }
+        }
+
+        async function apiRename(id, newName) {
             try {
                 const response = await fetch('/rename', {
                     method: 'POST',
@@ -227,30 +1232,32 @@
                     refreshList();
                     return;
                 }
-
-                if (response.status === 409) {
-                    alert("Name conflict! A file or folder with this name already exists.");
-                    return;
-                }
-
                 throw new Error(await response.text());
             } catch (e) {
-                alert('Failed to rename: ' + e.message);
+                alert(getText('error') + ": " + e.message);
             }
         }
 
-        async function copyNode(id) {
-            const targetParentIdStr = prompt("Enter target parent folder ID:");
-            if (targetParentIdStr === null) return;
-            const targetParentId = parseInt(targetParentIdStr);
-            if (isNaN(targetParentId)) {
-                alert("Invalid Parent ID");
-                return;
+        async function apiMove(id, targetParentId, strategy) {
+            try {
+                const response = await fetch('/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, targetParentId, strategy })
+                });
+                if (response.ok) {
+                    refreshList();
+                } else if (response.status === 409) {
+                    promptConflictChoice(id, targetParentId, 'move');
+                } else {
+                    throw new Error(await response.text());
+                }
+            } catch (e) {
+                alert(getText('error') + ": " + e.message);
             }
-            await doCopy(id, targetParentId, 'FAIL');
         }
 
-        async function doCopy(id, targetParentId, strategy) {
+        async function apiCopy(id, targetParentId, strategy) {
             try {
                 const response = await fetch('/copy', {
                     method: 'POST',
@@ -259,57 +1266,94 @@
                 });
                 if (response.ok) {
                     refreshList();
-                    return;
+                } else if (response.status === 409) {
+                    promptConflictChoice(id, targetParentId, 'copy');
+                } else {
+                    throw new Error(await response.text());
+                }
+            } catch (e) {
+                alert(getText('error') + ": " + e.message);
+            }
+        }
+
+        function promptConflictChoice(id, targetParentId, actionType) {
+            // Show custom Conflict Modal
+            const modal = document.getElementById('conflict-modal');
+
+            // Unbind old handlers
+            const btnRename = document.getElementById('conflict-rename-btn');
+            const btnOverwrite = document.getElementById('conflict-overwrite-btn');
+
+            btnRename.onclick = () => {
+                closeModal('conflict-modal');
+                if (actionType === 'move') apiMove(id, targetParentId, 'RENAME');
+                if (actionType === 'copy') apiCopy(id, targetParentId, 'RENAME');
+            };
+
+            btnOverwrite.onclick = () => {
+                closeModal('conflict-modal');
+                if (actionType === 'move') apiMove(id, targetParentId, 'OVERWRITE');
+                if (actionType === 'copy') apiCopy(id, targetParentId, 'OVERWRITE');
+            };
+
+            openModal('conflict-modal');
+        }
+
+        // --- Helpers ---
+
+        function openModal(id) {
+            document.getElementById(id).style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function getText(key) {
+            return i18n[currentLang][key] || key;
+        }
+
+        function sortTable(key) {
+            if (currentSortKey === key) {
+                sortDir = -sortDir; // toggle
+            } else {
+                currentSortKey = key;
+                sortDir = 1; // reset to asc
+            }
+            applySorting();
+            renderList(currentFiles);
+        }
+
+        function applySorting() {
+            const key = currentSortKey;
+            currentFiles.sort((a, b) => {
+                // Priority 1: Folder always on top
+                if (a.isFolder !== b.isFolder) {
+                    return a.isFolder ? -1 : 1;
                 }
 
-                if (response.status === 409) {
-                    const choice = prompt("File exists! Type 'RENAME' to generate copy, 'OVERWRITE' to replace (files only), or Cancel.");
-                    if (choice) {
-                        const s = choice.toUpperCase();
-                        if (s === 'RENAME' || s === 'OVERWRITE') {
-                            await doCopy(id, targetParentId, s);
-                            return;
-                        }
-                    }
-                    return;
+                // Priority 2: User Criteria
+                let valA = a[key];
+                let valB = b[key];
+                if (key === 'downloads') {
+                    // downloads is number
+                    valA = a.downloadCount;
+                    valB = b.downloadCount;
+                } else if (key === 'name') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                } else if (key === 'date') {
+                    valA = a.uploadTime;
+                    valB = b.uploadTime;
                 }
 
-                throw new Error(await response.text());
-            } catch (e) {
-                alert('Failed to copy: ' + e.message);
-            }
+                if (valA < valB) return -1 * sortDir;
+                if (valA > valB) return 1 * sortDir;
+                return 0;
+            });
+            updateSortIndicators();
         }
 
-        function downloadFile(id) {
-            window.location.href = `/download?id=${id}`;
-        }
-
-        async function uploadFile() {
-            const fileInput = document.getElementById('file-input');
-            const file = fileInput.files[0];
-            if (!file) {
-                alert("Please select a file");
-                return;
-            }
-
-            try {
-                // Post directly as binary body
-                const response = await fetch(`/upload?parentId=${currentParentId}&filename=${encodeURIComponent(file.name)}`, {
-                    method: 'POST',
-                    body: file
-                });
-
-                if (!response.ok) throw new Error(await response.text());
-                alert('Upload successful');
-                fileInput.value = '';
-                refreshList();
-            } catch (e) {
-                alert('Upload failed: ' + e.message);
-            }
-        }
-
-        // Initial load
-        refreshList();
     </script>
 </body>
 
