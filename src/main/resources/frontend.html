@@ -206,8 +206,20 @@
             color: white;
         }
 
+        .btn {
+            white-space: nowrap;
+        }
+
         .btn-danger:hover {
             filter: brightness(0.9);
+        }
+
+        .btn:disabled {
+            background-color: rgba(128, 128, 128, 0.3);
+            color: rgba(255, 255, 255, 0.5);
+            cursor: not-allowed;
+            pointer-events: auto;
+            /* Ensure cursor change works */
         }
 
         /* File List */
@@ -276,6 +288,8 @@
             align-items: center;
             justify-content: center;
             font-size: 1.2rem;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         .file-link {
@@ -623,6 +637,73 @@
         </div>
     </div>
 
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal glass">
+            <h3 id="confirm-title">Confirm</h3>
+            <div class="modal-body">
+                <p id="confirm-msg">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('confirm-modal')">Cancel</button>
+                <button class="btn btn-primary" id="confirm-btn-yes">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hash Modal -->
+    <div id="hash-modal" class="modal-overlay">
+        <div class="modal glass">
+            <h3 id="hash-modal-title">File Hash</h3>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">SHA-256</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="hash-input" class="form-input" readonly>
+                        <button class="btn btn-secondary" id="btn-copy-hash" onclick="copyHash()">Copy</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('hash-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Modal -->
+    <div id="progress-modal" class="modal-overlay" style="z-index: 2000;">
+        <div class="modal glass" style="max-width: 400px;">
+            <h3 id="progress-title">Uploading...</h3>
+            <div class="modal-body">
+                <div
+                    style="height: 10px; background: rgba(128,128,128,0.2); border-radius: 5px; overflow: hidden; margin-bottom: 15px;">
+                    <div id="progress-bar-fill"
+                        style="height: 100%; width: 0%; background: var(--accent-color); transition: width 0.2s;"></div>
+                </div>
+                <!-- Stats Grid -->
+                <div
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem; color: var(--text-secondary);">
+                    <div>
+                        <span id="txt-speed-label">Speed:</span> <span id="progress-speed"
+                            style="color: var(--text-primary); font-weight: 500;">-</span>
+                    </div>
+                    <div style="text-align: right;">
+                        <span id="progress-percent" style="font-weight: bold; color: var(--text-primary);">0%</span>
+                    </div>
+                    <div style="grid-column: 1 / -1;">
+                        <span id="txt-size-label">Size:</span> <span id="progress-size"
+                            style="color: var(--text-primary);">0 B / 0 B</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="progress-cancel-btn" onclick="abortUpload()">Cancel</button>
+                <button class="btn btn-primary" id="progress-confirm-btn" onclick="finishUpload()"
+                    disabled>Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Context Menu -->
     <div id="context-menu" class="context-menu glass">
         <div class="context-menu-item" onclick="handleContextAction('download')">⬇ <span class="ctx-text"
@@ -687,7 +768,15 @@
                 conflictMsg: "Item already exists at destination. Choose action:",
                 renameAuto: "Rename (Auto)",
                 overwrite: "Overwrite",
-                hashTitle: "File Hash (SHA-256)"
+                hashTitle: "File Hash (SHA-256)",
+                currentSpeed: "Speed:",
+                totalSize: "Size:",
+                copy: "Copy",
+                copied: "Copied!",
+                uploading: "Uploading...",
+                calculating: "Calculating...",
+                uploadComplete: "Upload Complete",
+                uploadConflictWarning: "File already exists. Overwrite?"
             },
             zh: {
                 refresh: "刷新",
@@ -723,7 +812,15 @@
                 conflictMsg: "目标位置已存在同名项目。请选择：",
                 renameAuto: "重命名(自动)",
                 overwrite: "覆盖",
-                hashTitle: "文件哈希值 (SHA-256)"
+                hashTitle: "文件哈希值 (SHA-256)",
+                currentSpeed: "当前速度:",
+                totalSize: "大小:",
+                copy: "复制",
+                copied: "已复制！",
+                uploading: "正在上传...",
+                calculating: "计算中...",
+                uploadComplete: "上传完成",
+                uploadConflictWarning: "文件已存在。是否覆盖？"
             }
         };
 
@@ -797,11 +894,43 @@
             document.getElementById('conflict-rename-btn').textContent = t.renameAuto;
             document.getElementById('conflict-overwrite-btn').textContent = t.overwrite;
 
+
             // Update Context Menu
             document.querySelectorAll('.ctx-text').forEach(el => {
                 const key = el.getAttribute('data-key');
                 if (t[key]) el.textContent = t[key];
             });
+
+            // Update Progress Modal
+            document.getElementById('txt-speed-label').textContent = t.currentSpeed;
+            document.getElementById('txt-size-label').textContent = t.totalSize;
+            document.getElementById('progress-cancel-btn').textContent = t.cancel;
+            document.getElementById('progress-confirm-btn').textContent = t.confirm;
+
+            // Update Hash Modal
+            document.getElementById('hash-modal-title').textContent = t.hashTitle;
+            document.getElementById('btn-copy-hash').textContent = t.copy;
+
+            // Update Confirm Modal
+            document.getElementById('confirm-title').textContent = t.confirm;
+            // Note: confirm-btn-yes is generic 'Confirm', using t.confirm
+            document.getElementById('confirm-btn-yes').textContent = t.confirm;
+            // We need to find the cancel button in confirm modal. It doesn't have an ID.
+            // Let's add IDs to modal buttons or select by context.
+            // The cancel button in confirm modal call be selected via:
+            const confirmModal = document.getElementById('confirm-modal');
+            confirmModal.querySelector('.btn-secondary').textContent = t.cancel;
+
+            // Update Picker Modal
+            document.getElementById('picker-title').textContent = t.selectDest;
+            document.getElementById('picker-confirm-btn').textContent = t.confirm;
+            const pickerModal = document.getElementById('picker-modal');
+            pickerModal.querySelector('.btn-secondary').textContent = t.cancel;
+
+            // Update Input Modal
+            document.getElementById('modal-confirm-btn').textContent = t.confirm;
+            const inputModal = document.getElementById('input-modal');
+            inputModal.querySelector('.btn-secondary').textContent = t.cancel;
 
             // Update Breadcrumbs
             renderBreadcrumbs();
@@ -849,14 +978,19 @@
                 tr.onclick = (e) => {
                     // Prevent row click if clicking action menu
                     if (e.target.closest('.action-menu-btn')) return;
+
+                    // Prevent action if text is selected
+                    if (window.getSelection().toString().length > 0) return;
+
                     // If folder, navigate
                     if (file.isFolder) {
                         enterFolder(file.id, file.name);
                     } else {
                         // Confirm download
-                        if (confirm(getText('downloadConfirm'))) {
+                        showConfirmModal(getText('download'), getText('downloadConfirm'), () => {
+                            showHashModal(file.hash);
                             window.location.href = `/download?id=${file.id}`;
-                        }
+                        });
                     }
                 };
 
@@ -875,7 +1009,7 @@
                     <td>
                         <div class="file-name">
                             <span class="file-icon">${icon}</span>
-                            <span class="${file.isFolder ? 'file-link' : ''}">${file.name}</span>
+                            <span class="file-link">${file.name}</span>
                         </div>
                     </td>
                     <td>${size}</td>
@@ -968,75 +1102,113 @@
             const file = input.files[0];
             if (!file) return;
 
-            // Check content conflict
-            const conflict = currentFiles.find(f => f.name === file.name);
-            if (conflict) {
-                // Open Warning Modal
-                const modal = document.getElementById('upload-warning-modal');
+            // Updated conflict flow with i18n
+            const processUpload = (fname) => {
+                performUpload(file, fname);
+            };
 
-                // Bind overwrite button
-                document.getElementById('upload-overwrite-btn').onclick = () => {
-                    closeModal('upload-warning-modal');
-                    performUpload(file, file.name); // Proceed with overwrite
-                };
-
-                // If user wants to "Rename", they can just close and use the Rename flow of the OS dialog? 
-                // Or we can offer rename here? 
-                // Requirement: "Warning user... confirm or cancel".
-                // BUT, previously we had a Rename-on-Upload modal. We should integrate them.
-                // Actually, the previous 'handleFileSelect' opened 'showInputModal' to confirm name.
-                // Let's first check name, if conflict, show warning.
-                // Steps: Select -> Check Name -> Conflict? -> Warn -> (If Overwrite) -> Upload.
-                // OR: Select -> Show Name Input (User might change name) -> Check Conflict -> Warn -> Upload.
-                // Let's do the second one.
-
-                showInputModal(getText('uploadTitle'), getText('fileName'), file.name, (newName) => {
-                    // Check conflict with newName
-                    const exists = currentFiles.find(f => f.name === newName);
-                    if (exists) {
-                        // Show warning
-                        const wModal = document.getElementById('upload-warning-modal');
-                        document.getElementById('upload-overwrite-btn').onclick = () => {
-                            closeModal('upload-warning-modal');
-                            performUpload(file, newName);
-                        };
-                        openModal('upload-warning-modal');
-                    } else {
-                        performUpload(file, newName);
-                    }
-                });
-
-            } else {
-                // No conflict with original name, but user might rename to a conflicting one.
-                showInputModal(getText('uploadTitle'), getText('fileName'), file.name, (newName) => {
-                    const exists = currentFiles.find(f => f.name === newName);
-                    if (exists) {
-                        const wModal = document.getElementById('upload-warning-modal');
-                        document.getElementById('upload-overwrite-btn').onclick = () => {
-                            closeModal('upload-warning-modal');
-                            performUpload(file, newName);
-                        };
-                        openModal('upload-warning-modal');
-                    } else {
-                        performUpload(file, newName);
-                    }
-                });
-            }
-
+            showInputModal(getText('uploadTitle'), getText('fileName'), file.name, (newName) => {
+                const exists = currentFiles.find(f => f.name === newName);
+                if (exists) {
+                    showConfirmModal(getText('conflictTitle'), getText('uploadConflictWarning'), () => {
+                        processUpload(newName);
+                    });
+                } else {
+                    processUpload(newName);
+                }
+            });
             input.value = '';
         }
 
-        async function performUpload(file, filename) {
-            try {
-                const res = await fetch(`/upload?parentId=${currentParentId}&filename=${encodeURIComponent(filename)}`, {
-                    method: 'POST',
-                    body: file
-                });
-                if (!res.ok) throw new Error(await res.text());
-                refreshList();
-            } catch (e) {
-                alert(getText('error') + ": " + e.message);
+        let uploadXhr = null;
+
+        function performUpload(file, filename) {
+            // Show Progress Modal
+            const pBar = document.getElementById('progress-bar-fill');
+            const pText = document.getElementById('progress-percent'); // now progress-percent
+            const pSpeed = document.getElementById('progress-speed');
+            const pSize = document.getElementById('progress-size');
+            const pTitle = document.getElementById('progress-title');
+
+            const btnCancel = document.getElementById('progress-cancel-btn');
+            const btnConfirm = document.getElementById('progress-confirm-btn');
+
+            pTitle.textContent = getText('uploading');
+            pBar.style.width = '0%';
+            document.getElementById('progress-percent').textContent = '0%';
+            pSpeed.textContent = getText('calculating');
+            pSize.textContent = `0 B / ${formatSize(file.size)}`;
+
+            btnCancel.disabled = false;
+            btnConfirm.disabled = true;
+
+            openModal('progress-modal');
+
+            uploadXhr = new XMLHttpRequest();
+            uploadXhr.open('POST', `/upload?parentId=${currentParentId}&filename=${encodeURIComponent(filename)}`);
+
+            let lastLoaded = 0;
+            let lastTime = Date.now();
+
+            uploadXhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const now = Date.now();
+                    const percent = Math.round((e.loaded / e.total) * 100);
+
+                    // Calc Speed
+                    const dt = (now - lastTime) / 1000;
+                    if (dt >= 0.5) { // Update every 0.5s to avoid jitter
+                        const dSize = e.loaded - lastLoaded;
+                        const speed = dSize / dt;
+                        pSpeed.textContent = formatSize(speed) + '/s';
+                        lastLoaded = e.loaded;
+                        lastTime = now;
+                    }
+
+                    pBar.style.width = percent + '%';
+                    document.getElementById('progress-percent').textContent = percent + '%';
+                    pSize.textContent = `${formatSize(e.loaded)} / ${formatSize(e.total)}`;
+                }
+            };
+
+            uploadXhr.onload = async () => {
+                if (uploadXhr.status === 200 || uploadXhr.status === 201) {
+                    // Success State
+                    pBar.style.width = '100%';
+                    document.getElementById('progress-percent').textContent = '100%';
+                    pTitle.textContent = getText('uploadComplete');
+                    btnCancel.disabled = true;
+                    btnConfirm.disabled = false;
+                } else {
+                    closeModal('progress-modal');
+                    alert(getText('error') + ": " + uploadXhr.responseText);
+                }
+            };
+
+            uploadXhr.onerror = () => {
+                closeModal('progress-modal');
+                alert(getText('error'));
+            };
+
+            uploadXhr.onabort = () => {
+                // Handled in abortUpload
+            };
+
+            uploadXhr.send(file);
+        }
+
+        function abortUpload() {
+            if (uploadXhr) {
+                uploadXhr.abort();
+                uploadXhr = null;
             }
+            closeModal('progress-modal');
+            showToast(getText('cancel'));
+        }
+
+        function finishUpload() {
+            closeModal('progress-modal');
+            refreshList();
         }
 
         function openCreateFolderModal() {
@@ -1083,9 +1255,10 @@
             switch (action) {
                 case 'download':
                     if (file.isFolder) return;
-                    if (confirm(getText('downloadConfirm'))) {
+                    showConfirmModal(getText('download'), getText('downloadConfirm'), () => {
+                        showHashModal(file.hash);
                         window.location.href = `/download?id=${file.id}`;
-                    }
+                    });
                     break;
                 case 'rename':
                     showInputModal(getText('renameTitle'), getText('newName'), file.name, (newName) => {
@@ -1093,9 +1266,9 @@
                     });
                     break;
                 case 'delete':
-                    if (confirm(getText('deleteConfirm'))) {
+                    showConfirmModal(getText('delete'), getText('deleteConfirm'), () => {
                         apiDelete(file.id);
-                    }
+                    });
                     break;
                 case 'move':
                     openPickerModal(getText('moveTitle'), (targetId) => {
@@ -1109,7 +1282,7 @@
                     break;
                 case 'hash':
                     if (file.isFolder) return;
-                    showInputModal(getText('hashTitle'), 'SHA-256', file.hash, () => { });
+                    showHashModal(file.hash);
                     break;
             }
             document.getElementById('context-menu').style.display = 'none';
@@ -1133,6 +1306,37 @@
             if (inputModalCallback) inputModalCallback(val);
             closeModal('input-modal');
         };
+
+        // --- Confirm Modal ---
+        let confirmModalCallback = null;
+        function showConfirmModal(title, msg, callback) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-msg').textContent = msg;
+            confirmModalCallback = callback;
+            openModal('confirm-modal');
+        }
+
+        document.getElementById('confirm-btn-yes').onclick = () => {
+            if (confirmModalCallback) confirmModalCallback();
+            closeModal('confirm-modal');
+        };
+
+        // --- Custom Hash Modal ---
+        function showHashModal(hash) {
+            document.getElementById('hash-input').value = hash;
+            openModal('hash-modal');
+        }
+
+        function copyHash() {
+            const input = document.getElementById('hash-input');
+            input.select();
+            navigator.clipboard.writeText(input.value).then(() => {
+                showToast(getText('copied'));
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
 
         let pickerCallback = null;
         let selectedFolderId = null;
@@ -1360,6 +1564,32 @@
             return i18n[currentLang][key] || key;
         }
 
+        // --- Toast ---
+        function showToast(msg) {
+            let toast = document.getElementById('toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toast';
+                toast.className = 'glass';
+                toast.style.position = 'fixed';
+                toast.style.bottom = '20px';
+                toast.style.right = '20px';
+                toast.style.padding = '12px 24px';
+                toast.style.borderRadius = '8px';
+                toast.style.background = 'var(--accent-color)';
+                toast.style.color = 'white';
+                toast.style.zIndex = '2000';
+                toast.style.display = 'none';
+                toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+
         function sortTable(key) {
             if (currentSortKey === key) {
                 sortDir = -sortDir; // toggle
@@ -1400,6 +1630,15 @@
             });
             updateSortIndicators();
         }
+
+        // --- Enter Key for Input Modal ---
+        document.getElementById('modal-input').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const confirmBtn = document.querySelector('#input-modal .btn-primary');
+                if (confirmBtn) confirmBtn.click();
+            }
+        });
 
     </script>
 </body>

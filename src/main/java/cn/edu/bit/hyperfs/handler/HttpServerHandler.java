@@ -108,7 +108,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             return;
         }
 
-        if (HttpMethod.GET.equals(request.method())) {
+        if (HttpMethod.GET.equals(request.method()) || HttpMethod.HEAD.equals(request.method())) {
             handleGetRequest(context, request, path, queryStringDecoder);
         } else if (HttpMethod.POST.equals(request.method())) {
             handlePostRequest(context, request, path, queryStringDecoder);
@@ -870,11 +870,18 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             }
 
             context.write(response);
-            var future = context.writeAndFlush(finalRegion, context.newProgressivePromise());
 
-            // 如果非 Keep-Alive 则关闭连接
-            if (!HttpUtil.isKeepAlive(request)) {
-                future.addListener(ChannelFutureListener.CLOSE);
+            if (HttpMethod.HEAD.equals(request.method())) {
+                // HEAD 请求不发送 Body，但由于我们使用了 FileRegion，需要释放它
+                if (finalRegion.refCnt() > 0) {
+                    finalRegion.release();
+                }
+            } else {
+                var future = context.writeAndFlush(finalRegion, context.newProgressivePromise());
+                // 如果非 Keep-Alive 则关闭连接
+                if (!HttpUtil.isKeepAlive(request)) {
+                    future.addListener(ChannelFutureListener.CLOSE);
+                }
             }
 
         } catch (Exception exception) {
