@@ -633,6 +633,8 @@
                 data-key="move">Move</span></div>
         <div class="context-menu-item" onclick="handleContextAction('copy')">📋 <span class="ctx-text"
                 data-key="copy">Copy</span></div>
+        <div class="context-menu-item" onclick="handleContextAction('hash')"># <span class="ctx-text"
+                data-key="hash">Hash</span></div>
         <div class="context-menu-item danger" onclick="handleContextAction('delete')">🗑 <span class="ctx-text"
                 data-key="delete">Delete</span></div>
     </div>
@@ -665,6 +667,7 @@
                 move: "Move",
                 copy: "Copy",
                 delete: "Delete",
+                hash: "Hash",
                 cancel: "Cancel",
                 confirm: "Confirm",
                 createFolderTitle: "Create New Folder",
@@ -677,12 +680,14 @@
                 copyTitle: "Copy to...",
                 selectDest: "Select Destination",
                 deleteConfirm: "Are you sure you want to delete this item?",
+                downloadConfirm: "Do you want to download this file?",
                 error: "Error",
                 success: "Success",
                 conflictTitle: "File Conflict",
                 conflictMsg: "Item already exists at destination. Choose action:",
                 renameAuto: "Rename (Auto)",
-                overwrite: "Overwrite"
+                overwrite: "Overwrite",
+                hashTitle: "File Hash (SHA-256)"
             },
             zh: {
                 refresh: "刷新",
@@ -698,6 +703,7 @@
                 move: "移动",
                 copy: "复制",
                 delete: "删除",
+                hash: "哈希值",
                 cancel: "取消",
                 confirm: "确定",
                 createFolderTitle: "新建文件夹",
@@ -710,12 +716,14 @@
                 copyTitle: "复制到...",
                 selectDest: "选择目标文件夹",
                 deleteConfirm: "确定要删除此项目吗？",
+                downloadConfirm: "确认下载该文件？",
                 error: "错误",
                 success: "成功",
                 conflictTitle: "文件冲突",
                 conflictMsg: "目标位置已存在同名项目。请选择：",
                 renameAuto: "重命名(自动)",
-                overwrite: "覆盖"
+                overwrite: "覆盖",
+                hashTitle: "文件哈希值 (SHA-256)"
             }
         };
 
@@ -725,6 +733,18 @@
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.documentElement.setAttribute('data-theme', savedTheme);
             document.getElementById('theme-btn').textContent = savedTheme === 'light' ? '🌙' : '☀️';
+
+            // State Init (Session Storage for Refresh Persistence)
+            const savedState = sessionStorage.getItem('hyperfs_state');
+            if (savedState) {
+                try {
+                    const state = JSON.parse(savedState);
+                    currentParentId = state.parentId;
+                    pathStack = state.pathStack;
+                } catch (e) {
+                    console.error("Failed to load state", e);
+                }
+            }
 
             // Click outside to close context menu
             document.addEventListener('click', (e) => {
@@ -737,6 +757,13 @@
             refreshList();
             updateLanguageUI();
         });
+
+        function saveState() {
+            sessionStorage.setItem('hyperfs_state', JSON.stringify({
+                parentId: currentParentId,
+                pathStack: pathStack
+            }));
+        }
 
         // --- UI Functions ---
 
@@ -823,7 +850,14 @@
                     // Prevent row click if clicking action menu
                     if (e.target.closest('.action-menu-btn')) return;
                     // If folder, navigate
-                    if (file.isFolder) enterFolder(file.id, file.name);
+                    if (file.isFolder) {
+                        enterFolder(file.id, file.name);
+                    } else {
+                        // Confirm download
+                        if (confirm(getText('downloadConfirm'))) {
+                            window.location.href = `/download?id=${file.id}`;
+                        }
+                    }
                 };
 
                 // Right click
@@ -848,7 +882,7 @@
                     <td>${date}</td>
                     <td>${downloads}</td>
                     <td style="text-align: right;">
-                        <button class="action-menu-btn" onclick="showContextMenu(event, {id: ${file.id}, name: '${file.name}', isFolder: ${file.isFolder}})">•••</button>
+                        <button class="action-menu-btn" onclick="showContextMenu(event, {id: ${file.id}, name: '${file.name}', isFolder: ${file.isFolder}, hash: '${file.hash || ''}'})">•••</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -912,12 +946,14 @@
         function enterFolder(id, name) {
             currentParentId = id;
             pathStack.push({ id, name });
+            saveState();
             refreshList();
         }
 
         function navigateToBreadcrumb(index) {
             pathStack = pathStack.slice(0, index + 1);
             currentParentId = pathStack[pathStack.length - 1].id;
+            saveState();
             refreshList();
         }
 
@@ -1026,6 +1062,11 @@
             e.stopPropagation();
             contextTarget = file;
             const menu = document.getElementById('context-menu');
+
+            // Show/Hide Hash option based on isFolder
+            const hashItem = menu.querySelector('[data-key="hash"]').parentElement;
+            hashItem.style.display = file.isFolder ? 'none' : 'flex';
+
             menu.style.display = 'block';
             menu.style.left = `${e.pageX}px`;
             menu.style.top = `${e.pageY}px`;
@@ -1042,7 +1083,9 @@
             switch (action) {
                 case 'download':
                     if (file.isFolder) return;
-                    window.location.href = `/download?id=${file.id}`;
+                    if (confirm(getText('downloadConfirm'))) {
+                        window.location.href = `/download?id=${file.id}`;
+                    }
                     break;
                 case 'rename':
                     showInputModal(getText('renameTitle'), getText('newName'), file.name, (newName) => {
@@ -1063,6 +1106,10 @@
                     openPickerModal(getText('copyTitle'), (targetId) => {
                         apiCopy(file.id, targetId, 'FAIL');
                     });
+                    break;
+                case 'hash':
+                    if (file.isFolder) return;
+                    showInputModal(getText('hashTitle'), 'SHA-256', file.hash, () => { });
                     break;
             }
             document.getElementById('context-menu').style.display = 'none';
