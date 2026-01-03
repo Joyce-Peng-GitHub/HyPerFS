@@ -72,7 +72,7 @@
 
         /* Layout */
         .container {
-            max-width: 1200px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 20px;
             min-height: 100vh;
@@ -496,6 +496,114 @@
             .actions {
                 justify-content: space-between;
             }
+
+            .main-layout {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100% !important;
+                max-height: 200px;
+            }
+        }
+
+        /* Main Split Layout */
+        .main-layout {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 15px 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sidebar-tree {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px;
+        }
+
+        /* Sidebar Tree Node */
+        .sidebar-tree-node {
+            user-select: none;
+        }
+
+        .sidebar-tree-row {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            gap: 6px;
+            transition: background-color 0.15s;
+        }
+
+        .sidebar-tree-row:hover {
+            background-color: rgba(128, 128, 128, 0.1);
+        }
+
+        .sidebar-tree-row.selected {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .sidebar-tree-toggle {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .sidebar-tree-toggle:hover {
+            color: var(--text-primary);
+        }
+
+        .sidebar-tree-icon {
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .sidebar-tree-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.9rem;
+        }
+
+        .sidebar-tree-children {
+            margin-left: 18px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
     </style>
 </head>
@@ -517,56 +625,70 @@
             </div>
         </header>
 
-        <!-- Main Content -->
-        <main class="glass file-list-container">
-            <!-- Toolbar -->
-            <div class="toolbar-area">
-                <div class="breadcrumbs" id="breadcrumbs">
-                    <!-- JS Injected -->
+        <!-- Main Layout: Sidebar + Content -->
+        <div class="main-layout">
+            <!-- Sidebar with File Tree -->
+            <aside class="sidebar glass">
+                <div class="sidebar-header">
+                    <span>📂</span>
+                    <span id="txt-file-tree">文件树</span>
                 </div>
-                <div class="actions">
-                    <button class="btn btn-secondary" onclick="refreshList()">
-                        <span id="txt-refresh">Refresh</span>
-                    </button>
-                    <button class="btn btn-secondary" onclick="openCreateFolderModal()">
-                        <span id="txt-new-folder">New Folder</span>
-                    </button>
-                    <button class="btn btn-primary" onclick="triggerUpload()">
-                        <span id="txt-upload">Upload</span>
-                    </button>
-                    <!-- Hidden File Input -->
-                    <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect()">
+                <div class="sidebar-tree" id="sidebar-tree">
+                    <!-- JS Generated Tree -->
                 </div>
-            </div>
+            </aside>
 
-            <!-- File Table -->
-            <table>
-                <thead>
-                    <tr>
-                        <th onclick="sortTable('name')" style="width: 45%;">
-                            <span id="th-name">Name</span> <span id="sort-ind-name" class="sort-indicator"></span>
-                        </th>
-                        <th onclick="sortTable('size')" style="width: 15%;">
-                            <span id="th-size">Size</span> <span id="sort-ind-size" class="sort-indicator"></span>
-                        </th>
-                        <th onclick="sortTable('date')" style="width: 25%;">
-                            <span id="th-date">Date</span> <span id="sort-ind-date" class="sort-indicator"></span>
-                        </th>
-                        <th onclick="sortTable('downloads')" style="width: 10%;">
-                            <span id="th-downloads">Downloads</span> <span id="sort-ind-downloads"
-                                class="sort-indicator"></span>
-                        </th>
-                        <th style="width: 5%;"></th>
-                    </tr>
-                </thead>
-                <tbody id="file-list-body">
-                    <!-- JS Injected -->
-                </tbody>
-            </table>
-            <div id="empty-state" class="empty-state" style="display: none;">
-                <span id="txt-empty">Folder is empty</span>
-            </div>
-        </main>
+            <!-- Main Content Area -->
+            <main class="main-content glass file-list-container">
+                <!-- Toolbar -->
+                <div class="toolbar-area">
+                    <div class="breadcrumbs" id="breadcrumbs">
+                        <!-- JS Injected -->
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-secondary" onclick="refreshList()">
+                            <span id="txt-refresh">Refresh</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="openCreateFolderModal()">
+                            <span id="txt-new-folder">New Folder</span>
+                        </button>
+                        <button class="btn btn-primary" onclick="triggerUpload()">
+                            <span id="txt-upload">Upload</span>
+                        </button>
+                        <!-- Hidden File Input -->
+                        <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect()">
+                    </div>
+                </div>
+
+                <!-- File Table -->
+                <table>
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable('name')" style="width: 45%;">
+                                <span id="th-name">Name</span> <span id="sort-ind-name" class="sort-indicator"></span>
+                            </th>
+                            <th onclick="sortTable('size')" style="width: 15%;">
+                                <span id="th-size">Size</span> <span id="sort-ind-size" class="sort-indicator"></span>
+                            </th>
+                            <th onclick="sortTable('date')" style="width: 25%;">
+                                <span id="th-date">Date</span> <span id="sort-ind-date" class="sort-indicator"></span>
+                            </th>
+                            <th onclick="sortTable('downloads')" style="width: 10%;">
+                                <span id="th-downloads">Downloads</span> <span id="sort-ind-downloads"
+                                    class="sort-indicator"></span>
+                            </th>
+                            <th style="width: 5%;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="file-list-body">
+                        <!-- JS Injected -->
+                    </tbody>
+                </table>
+                <div id="empty-state" class="empty-state" style="display: none;">
+                    <span id="txt-empty">Folder is empty</span>
+                </div>
+            </main>
+        </div>
     </div>
 
     <!-- Modals -->
@@ -732,6 +854,10 @@
         let currentSortKey = 'name';
         let sortDir = 1; // 1: asc, -1: desc
 
+        // Sidebar Tree State
+        let sidebarExpandedNodes = new Set([0]); // Expanded folder IDs, root is always expanded
+        let sidebarTreeCache = new Map(); // Cache folder children: id -> [{id, name, isFolder}]
+
         // --- i18n ---
         const i18n = {
             en: {
@@ -776,7 +902,8 @@
                 uploading: "Uploading...",
                 calculating: "Calculating...",
                 uploadComplete: "Upload Complete",
-                uploadConflictWarning: "File already exists. Overwrite?"
+                uploadConflictWarning: "File already exists. Overwrite?",
+                fileTree: "File Tree"
             },
             zh: {
                 refresh: "刷新",
@@ -820,7 +947,8 @@
                 uploading: "正在上传...",
                 calculating: "计算中...",
                 uploadComplete: "上传完成",
-                uploadConflictWarning: "文件已存在。是否覆盖？"
+                uploadConflictWarning: "文件已存在。是否覆盖？",
+                fileTree: "文件树"
             }
         };
 
@@ -853,6 +981,7 @@
 
             refreshList();
             updateLanguageUI();
+            initSidebarTree();
         });
 
         function saveState() {
@@ -934,6 +1063,12 @@
 
             // Update Breadcrumbs
             renderBreadcrumbs();
+
+            // Update Sidebar File Tree Header
+            document.getElementById('txt-file-tree').textContent = t.fileTree;
+
+            // Re-init sidebar tree to update root node name
+            initSidebarTree();
         }
 
         function updateSortIndicators() {
@@ -1639,6 +1774,263 @@
                 if (confirmBtn) confirmBtn.click();
             }
         });
+
+        // --- Sidebar File Tree ---
+
+        async function initSidebarTree() {
+            const container = document.getElementById('sidebar-tree');
+            container.innerHTML = '';
+
+            // Create root node
+            const rootNode = createSidebarTreeNode(0, currentLang === 'zh' ? '首页' : 'Home', 0);
+            container.appendChild(rootNode);
+
+            // Auto-expand root
+            await loadAndExpandSidebarNode(0);
+            syncSidebarSelection();
+        }
+
+        function createSidebarTreeNode(id, name, level) {
+            const node = document.createElement('div');
+            node.className = 'sidebar-tree-node';
+            node.dataset.id = id;
+            node.dataset.level = level;
+
+            const row = document.createElement('div');
+            row.className = 'sidebar-tree-row';
+            row.style.paddingLeft = (level * 18 + 8) + 'px';
+
+            // Toggle button
+            const toggle = document.createElement('span');
+            toggle.className = 'sidebar-tree-toggle';
+            toggle.textContent = '▶';
+            toggle.onclick = async (e) => {
+                e.stopPropagation();
+                await toggleSidebarExpand(id, node);
+            };
+
+            // Icon
+            const icon = document.createElement('span');
+            icon.className = 'sidebar-tree-icon';
+            icon.textContent = '📁';
+
+            // Name
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'sidebar-tree-name';
+            nameSpan.textContent = name;
+
+            row.appendChild(toggle);
+            row.appendChild(icon);
+            row.appendChild(nameSpan);
+
+            // Single click: select
+            let clickTimer = null;
+            row.onclick = (e) => {
+                e.stopPropagation();
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                    clickTimer = null;
+                    // Double click detected
+                    handleSidebarDblClick(id, name);
+                } else {
+                    clickTimer = setTimeout(() => {
+                        clickTimer = null;
+                        handleSidebarClick(id, row);
+                    }, 250);
+                }
+            };
+
+            node.appendChild(row);
+
+            // Children container
+            const children = document.createElement('div');
+            children.className = 'sidebar-tree-children';
+            children.style.display = 'none';
+            node.appendChild(children);
+
+            return node;
+        }
+
+        function handleSidebarClick(id, rowElement) {
+            // Highlight row
+            document.querySelectorAll('.sidebar-tree-row.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            rowElement.classList.add('selected');
+        }
+
+        function handleSidebarDblClick(id, name) {
+            // Navigate to this folder
+            if (id === 0) {
+                // Go to root
+                pathStack = [{ id: 0, name: 'Home' }];
+                currentParentId = 0;
+            } else {
+                // Find path to this folder by traversing the tree
+                const path = findPathToNode(id);
+                if (path) {
+                    pathStack = path;
+                    currentParentId = id;
+                } else {
+                    // Fallback: just set parent and rebuild path later via navigation
+                    currentParentId = id;
+                    pathStack = [{ id: 0, name: 'Home' }, { id, name }];
+                }
+            }
+            saveState();
+            refreshList();
+            syncSidebarSelection();
+        }
+
+        function findPathToNode(targetId) {
+            // BFS through sidebar tree DOM to find path
+            const result = [{ id: 0, name: currentLang === 'zh' ? '首页' : 'Home' }];
+
+            function searchNode(container, path) {
+                const nodes = container.querySelectorAll(':scope > .sidebar-tree-node');
+                for (const node of nodes) {
+                    const nodeId = parseInt(node.dataset.id);
+                    const nameEl = node.querySelector(':scope > .sidebar-tree-row .sidebar-tree-name');
+                    const nodeName = nameEl ? nameEl.textContent : '';
+
+                    if (nodeId === targetId) {
+                        return [...path, { id: nodeId, name: nodeName }];
+                    }
+
+                    const childContainer = node.querySelector(':scope > .sidebar-tree-children');
+                    if (childContainer && childContainer.children.length > 0) {
+                        const found = searchNode(childContainer, [...path, { id: nodeId, name: nodeName }]);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            }
+
+            const container = document.getElementById('sidebar-tree');
+            const rootNode = container.querySelector('.sidebar-tree-node[data-id="0"]');
+            if (rootNode) {
+                if (targetId === 0) return result;
+                const childContainer = rootNode.querySelector(':scope > .sidebar-tree-children');
+                if (childContainer) {
+                    return searchNode(childContainer, result);
+                }
+            }
+            return null;
+        }
+
+        async function toggleSidebarExpand(id, nodeElement) {
+            const childrenContainer = nodeElement.querySelector(':scope > .sidebar-tree-children');
+            const toggle = nodeElement.querySelector(':scope > .sidebar-tree-row .sidebar-tree-toggle');
+
+            if (sidebarExpandedNodes.has(id)) {
+                // Collapse
+                sidebarExpandedNodes.delete(id);
+                childrenContainer.style.display = 'none';
+                toggle.textContent = '▶';
+            } else {
+                // Expand
+                await loadAndExpandSidebarNode(id);
+            }
+        }
+
+        async function loadAndExpandSidebarNode(id) {
+            const nodeElement = document.querySelector(`.sidebar-tree-node[data-id="${id}"]`);
+            if (!nodeElement) return;
+
+            const childrenContainer = nodeElement.querySelector(':scope > .sidebar-tree-children');
+            const toggle = nodeElement.querySelector(':scope > .sidebar-tree-row .sidebar-tree-toggle');
+            const level = parseInt(nodeElement.dataset.level);
+
+            // Show loading
+            toggle.textContent = '...';
+
+            try {
+                // Fetch children if not cached or need refresh
+                let children = sidebarTreeCache.get(id);
+                if (!children) {
+                    const res = await fetch(`/list?parentId=${id}`);
+                    const data = await res.json();
+                    children = data.filter(f => f.isFolder);
+                    sidebarTreeCache.set(id, children);
+                }
+
+                // Render children
+                childrenContainer.innerHTML = '';
+                children.forEach(child => {
+                    const childNode = createSidebarTreeNode(child.id, child.name, level + 1);
+                    childrenContainer.appendChild(childNode);
+                });
+
+                sidebarExpandedNodes.add(id);
+                childrenContainer.style.display = 'block';
+                toggle.textContent = '▼';
+            } catch (e) {
+                console.error('Failed to load sidebar children', e);
+                toggle.textContent = '!';
+            }
+        }
+
+        function syncSidebarSelection() {
+            // Highlight the currently navigated folder in sidebar
+            document.querySelectorAll('.sidebar-tree-row.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            const targetNode = document.querySelector(`.sidebar-tree-node[data-id="${currentParentId}"]`);
+            if (targetNode) {
+                const row = targetNode.querySelector(':scope > .sidebar-tree-row');
+                if (row) {
+                    row.classList.add('selected');
+                }
+            }
+        }
+
+        // Override refreshList to also sync sidebar
+        const originalRefreshList = refreshList;
+        refreshList = async function () {
+            await originalRefreshList();
+
+            // Clear all cache to ensure sidebar reflects latest state
+            sidebarTreeCache.clear();
+
+            // Reload all currently expanded nodes
+            await refreshExpandedSidebarNodes();
+
+            syncSidebarSelection();
+        };
+
+        async function refreshExpandedSidebarNodes() {
+            // Get list of expanded node IDs (copy to avoid mutation issues)
+            const expandedIds = [...sidebarExpandedNodes];
+
+            for (const id of expandedIds) {
+                const nodeElement = document.querySelector(`.sidebar-tree-node[data-id="${id}"]`);
+                if (nodeElement) {
+                    const childrenContainer = nodeElement.querySelector(':scope > .sidebar-tree-children');
+                    const toggle = nodeElement.querySelector(':scope > .sidebar-tree-row .sidebar-tree-toggle');
+                    const level = parseInt(nodeElement.dataset.level);
+
+                    try {
+                        const res = await fetch(`/list?parentId=${id}`);
+                        const data = await res.json();
+                        const children = data.filter(f => f.isFolder);
+                        sidebarTreeCache.set(id, children);
+
+                        // Re-render children
+                        childrenContainer.innerHTML = '';
+                        children.forEach(child => {
+                            const childNode = createSidebarTreeNode(child.id, child.name, level + 1);
+                            childrenContainer.appendChild(childNode);
+                        });
+
+                        childrenContainer.style.display = 'block';
+                        toggle.textContent = '▼';
+                    } catch (e) {
+                        console.error('Failed to refresh sidebar node', id, e);
+                    }
+                }
+            }
+        }
 
     </script>
 </body>
