@@ -1,20 +1,44 @@
 package cn.edu.bit.hyperfs.handler;
 
+import cn.edu.bit.hyperfs.entity.FileMetaEntity;
+import cn.edu.bit.hyperfs.service.DatabaseService;
+import cn.edu.bit.hyperfs.service.FileService;
+import cn.edu.bit.hyperfs.service.FileUploadSession;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.DefaultFileRegion;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.edu.bit.hyperfs.service.FileService;
-import cn.edu.bit.hyperfs.service.FileUploadSession;
-import cn.edu.bit.hyperfs.entity.FileMetaEntity;
-
+import java.io.FileNotFoundException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
+/**
+ * HTTP 服务处理器
+ * 
+ * 详细描述：
+ * 处理所有入站 HTTP 请求，包括 REST API 和 WebDAV 协议。
+ * 负责请求路由、参数解析、调用 Service 层逻辑以及构造 HTTP 响应。
+ */
 public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private static final Logger logger = LoggerFactory.getLogger(HttpServerHandler.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -44,12 +68,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private StringBuilder copyJsonBuffer = new StringBuilder();
 
     // WebDAV XML Mapper
-    private static final com.fasterxml.jackson.dataformat.xml.XmlMapper xmlMapper = new com.fasterxml.jackson.dataformat.xml.XmlMapper();
+    private static final XmlMapper xmlMapper = new XmlMapper();
 
     public HttpServerHandler() {
         super();
-        xmlMapper.enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT);
-        xmlMapper.disable(com.fasterxml.jackson.databind.SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        xmlMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        xmlMapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
     }
 
     @Override
@@ -137,6 +161,11 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
 
     /**
      * 处理 WebDAV 请求
+     *
+     * @param context ChannelHandlerContext
+     * @param request HTTP请求
+     * @param path    路径
+     * @throws Exception 异常
      */
     private void handleWebDavRequest(ChannelHandlerContext context, HttpRequest request, String path) throws Exception {
         // 移除 /webdav 前缀，得到相对路径，如 /folder/file.txt
@@ -178,7 +207,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 default:
                     sendError(context, HttpResponseStatus.NOT_IMPLEMENTED);
             }
-        } catch (java.io.FileNotFoundException exception) {
+        } catch (FileNotFoundException exception) {
             sendError(context, HttpResponseStatus.NOT_FOUND);
         } catch (Exception exception) {
             logger.error("WebDAV Error", exception);
@@ -194,17 +223,39 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         context.writeAndFlush(response);
     }
 
+    /**
+     * 处理 WebDAV MKCOL 请求 (创建集合/文件夹)
+     *
+     * @param context ChannelHandlerContext
+     * @param path    路径
+     * @throws Exception 异常
+     */
     private void handleWebDavMkCol(ChannelHandlerContext context, String path) throws Exception {
         fileService.createDirectoryByPath(path);
         sendResponse(context, HttpResponseStatus.CREATED, "");
     }
 
+    /**
+     * 处理 WebDAV DELETE 请求
+     *
+     * @param context ChannelHandlerContext
+     * @param path    路径
+     * @throws Exception 异常
+     */
     private void handleWebDavDelete(ChannelHandlerContext context, String path) throws Exception {
         var meta = fileService.resolvePath(path);
         fileService.delete(meta.getId());
         sendResponse(context, HttpResponseStatus.NO_CONTENT, "");
     }
 
+    /**
+     * 处理 WebDAV COPY 请求
+     *
+     * @param context ChannelHandlerContext
+     * @param request HTTP请求
+     * @param path    源路径
+     * @throws Exception 异常
+     */
     private void handleWebDavCopy(ChannelHandlerContext context, HttpRequest request, String path) throws Exception {
         var destination = getDestinationPath(request);
         if (destination == null) {
@@ -234,10 +285,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         // FileService.copyNode 会处理重名检测
         try {
             fileService.copyNode(sourceMeta.getId(), destParentMeta.getId(), strategy);
-        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+        } catch (DatabaseService.FileConflictException e) {
             sendError(context, HttpResponseStatus.PRECONDITION_FAILED, "File or folder exists and Overwrite is F");
             return;
-        } catch (cn.edu.bit.hyperfs.service.DatabaseService.MoveException e) {
+        } catch (DatabaseService.MoveException e) {
             // 如：不能覆盖文件夹，或不能覆盖文件到自己
             sendError(context, HttpResponseStatus.CONFLICT, e.getMessage());
             return;
@@ -246,6 +297,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         sendResponse(context, overwrite ? HttpResponseStatus.NO_CONTENT : HttpResponseStatus.CREATED, "");
     }
 
+    /**
+     * 处理 WebDAV MOVE 请求
+     *
+     * @param context ChannelHandlerContext
+     * @param request HTTP请求
+     * @param path    源路径
+     * @throws Exception 异常
+     */
     private void handleWebDavMove(ChannelHandlerContext context, HttpRequest request, String path) throws Exception {
         var destination = getDestinationPath(request);
         if (destination == null) {
@@ -307,10 +366,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 // 实际上 FileService.moveNode 已经包含了更完善的冲突处理逻辑
                 // 即使是同一目录，moveNode 也能工作（虽然有点重，但逻辑一致）
                 fileService.moveNode(sourceMeta.getId(), destParentMeta.getId(), destFileName, strategy);
-            } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+            } catch (DatabaseService.FileConflictException e) {
                 sendError(context, HttpResponseStatus.PRECONDITION_FAILED, "File exists and Overwrite is F");
                 return;
-            } catch (cn.edu.bit.hyperfs.service.DatabaseService.MoveException e) {
+            } catch (DatabaseService.MoveException e) {
                 sendError(context, HttpResponseStatus.CONFLICT, e.getMessage());
                 return;
             }
@@ -318,10 +377,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             // 移动到不同目录
             try {
                 fileService.moveNode(sourceMeta.getId(), destParentMeta.getId(), destFileName, strategy);
-            } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+            } catch (DatabaseService.FileConflictException e) {
                 sendError(context, HttpResponseStatus.PRECONDITION_FAILED, "File exists and Overwrite is F");
                 return;
-            } catch (cn.edu.bit.hyperfs.service.DatabaseService.MoveException e) {
+            } catch (DatabaseService.MoveException e) {
                 sendError(context, HttpResponseStatus.CONFLICT, e.getMessage());
                 return;
             }
@@ -330,6 +389,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         sendResponse(context, HttpResponseStatus.CREATED, ""); // 或者 NO_CONTENT
     }
 
+    /**
+     * 获取 WebDAV Destination 头并解析路径
+     *
+     * @param request HTTP请求
+     * @return 目标路径（相对）
+     */
     private String getDestinationPath(HttpRequest request) {
         var destHeader = request.headers().get("Destination");
         if (destHeader == null) {
@@ -338,16 +403,15 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         // Destination 是绝对 URI，如 http://localhost:14514/webdav/folder/file.txt
         // 或者是相对 URI
         try {
-            var uri = new java.net.URI(destHeader);
-            var path = uri.getPath(); // 获取路径部分，已解码? URI.getPath() returns decoded path component? NO, it returns
-                                      // valid path chars.
-            // 实际上 Netty 的 uri 是字符串。URI.create(s).getPath() 会解码吗？
-            // 测试表明 URI.getPath() 会解码 %20 但可能保留其他。
-            // 此外，我们需要处理 /webdav 前缀
-            // 假设服务根是 /webdav
+            var uri = new URI(destHeader);
 
-            // 让我们自己简单处理一下 decoding，以防万一
-            path = java.net.URLDecoder.decode(path, StandardCharsets.UTF_8);
+            // 获取路径部分
+            // URI.getPath() 返回解码后的路径组件
+            var path = uri.getPath();
+
+            // 再次进行 URL 解码以确保所有特殊字符（如中文）被正确处理
+            // (某些客户端可能对 Path 处理不一致)
+            path = URLDecoder.decode(path, StandardCharsets.UTF_8);
 
             if (path.startsWith("/webdav")) {
                 path = path.substring(7);
@@ -361,6 +425,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
+    /**
+     * 处理 WebDAV PUT 请求 (文件上传)
+     *
+     * @param context ChannelHandlerContext
+     * @param request HTTP请求
+     * @param path    路径
+     * @throws Exception 异常
+     */
     private void handleWebDavPut(ChannelHandlerContext context, HttpRequest request, String path) throws Exception {
         // WebDAV PUT 通常直接在 Body 中包含文件内容
         // 这里需要状态机来接收 Content。由于 Netty 是异步的，我们需要设置状态
@@ -409,68 +481,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
 
         // 复用 handleDownload 逻辑
-        // 需要构建一个假的 download 流程，或者提取 handleDownload 的公共部分
-        // 鉴于 handleDownload 依赖 query parameter "id"，我们这里需要手动查找
-        // 我们可以为 QueryStringDecoder 注入 id 参数，或者重构 handleDownload。
-        // 最简单的：直接调用底层的 fileService.startDownload 既然我们已经有了 ID
-
-        var id = meta.getId();
-
-        // 以下逻辑复用 handleDownload 的核心部分
-        // 获取全量资源以确认文件存在并获取总大小
-        var downloadResource = fileService.startDownload(id, 0, Long.MAX_VALUE);
-        var file = downloadResource.file();
-        var totalLength = downloadResource.totalLength();
-
-        // 解析 Range
-        var range = parseRange(request.headers().get(HttpHeaderNames.RANGE), totalLength);
-
-        // ... (省略部分重复逻辑，实际上应该提取公共方法 sendFileResponse)
-        // 为了避免代码重复，建议将 handleDownload 中的发送逻辑提取为 sendFileResponse(ctx, req, resource,
-        // range)
-
-        // 简单起见，这里完整复制一次逻辑
-        if (range.isPartial()) {
-            if (range.start() < 0 || range.end() >= totalLength || range.start() > range.end()) {
-                downloadResource.region().release();
-                var response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
-                        HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE);
-                response.headers().set(HttpHeaderNames.CONTENT_RANGE, "bytes */" + totalLength);
-                context.writeAndFlush(response);
-                return;
-            }
-        }
-        long contentLength = range.end() - range.start() + 1;
-        DefaultFileRegion finalRegion;
-        if (range.isPartial()) {
-            downloadResource.region().release();
-            finalRegion = new DefaultFileRegion(file, range.start(), contentLength);
-        } else {
-            finalRegion = downloadResource.region();
-        }
-
-        var status = range.isPartial() ? HttpResponseStatus.PARTIAL_CONTENT : HttpResponseStatus.OK;
-        var response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
-        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, contentLength);
-        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
-        response.headers().set(HttpHeaderNames.ACCEPT_RANGES, "bytes");
-        // WebDAV GET 不需要 Content-Disposition attachment，因为它被视为直接访问
-        // response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION, "attachment;
-        // ...");
-
-        if (range.isPartial()) {
-            response.headers().set(HttpHeaderNames.CONTENT_RANGE,
-                    "bytes " + range.start() + "-" + range.end() + "/" + totalLength);
-        }
-        if (HttpUtil.isKeepAlive(request)) {
-            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-        }
-
-        context.write(response);
-        var future = context.writeAndFlush(finalRegion, context.newProgressivePromise());
-        if (!HttpUtil.isKeepAlive(request)) {
-            future.addListener(ChannelFutureListener.CLOSE);
-        }
+        sendDownloadResponse(context, request, meta.getId(), false);
     }
 
     private void handleWebDavPropFind(ChannelHandlerContext context, HttpRequest request, String path)
@@ -525,12 +536,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             return "/";
         }
         var segments = path.split("/");
-        var encodedSegments = new java.util.ArrayList<String>();
+        var encodedSegments = new ArrayList<String>();
         for (var segment : segments) {
             if (!segment.isEmpty()) {
                 try {
                     // 编码每个路径段，然后将 + 替换为 %20（因为 URLEncoder 会将空格编码为 +）
-                    var encoded = java.net.URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20");
+                    var encoded = URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20");
                     encodedSegments.add(encoded);
                 } catch (Exception e) {
                     encodedSegments.add(segment);
@@ -540,7 +551,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         return "/" + String.join("/", encodedSegments);
     }
 
-    private void addResponse(MultiStatus multiStatus, cn.edu.bit.hyperfs.entity.FileMetaEntity meta, String path) {
+    /**
+     * 添加 WebDAV 响应到 MultiStatus
+     *
+     * @param multiStatus MultiStatus 对象
+     * @param meta        文件元数据
+     * @param path        文件路径
+     */
+    private void addResponse(MultiStatus multiStatus, FileMetaEntity meta, String path) {
         var response = new DavResponse();
         // href 必须是 URL 编码的（逐段编码）
         var encodedPath = encodePathForWebDav(path);
@@ -567,12 +585,11 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
 
         // 假设 meta.getUploadTime() 是 ISO 8601 字符串或时间戳
         // 这里需要解析并重新格式化。为了简单，我们假设数据库存储的是 UTC 时间字符串。
-        // 如果是时间戳，需转换。假设是 "yyyy-MM-dd HH:mm:ss"
         try {
             // 使用自定义格式化器确保两位数日期 (RFC 1123 strict)
-            var rfc1123Formatter = java.time.format.DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss z",
-                    java.util.Locale.US);
-            var now = java.time.ZonedDateTime.now(java.time.ZoneId.of("GMT"));
+            var rfc1123Formatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss z",
+                    Locale.US);
+            var now = ZonedDateTime.now(ZoneId.of("GMT"));
             prop.setGetlastmodified(now.format(rfc1123Formatter));
             prop.setCreationdate(now.toInstant().toString()); // ISO 8601 格式
         } catch (Exception e) {
@@ -585,6 +602,13 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         multiStatus.addResponse(response);
     }
 
+    /**
+     * 处理 HTTP 内容 (Body)
+     *
+     * @param context ChannelHandlerContext
+     * @param content HttpContent
+     * @throws Exception 异常
+     */
     private void handleHttpContent(ChannelHandlerContext context, HttpContent content) throws Exception {
         if (isUploading && uploadSession != null) {
             uploadSession.processChunk(content.content());
@@ -595,10 +619,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 isUploading = false;
 
                 // 区分 WebDAV 和 普通上传
-                // 普通上传 handleUploadStart 返回的是 OK and Text body
-                // WebDAV PUT 返回 Created context is handled inside handleWebDavPut?
-                // 上面的 `handleWebDavPut` 如果是 FullHttpRequest 其实已经处理完了。
-                // 如果是分块的，这里处理完 LastHttpContent 应该返回响应
                 sendResponse(context, HttpResponseStatus.CREATED, "");
             }
         } else if (isMoving) {
@@ -625,28 +645,26 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
-    // --- WebDAV XML Structures ---
-
-    @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement(localName = "multistatus", namespace = "DAV:")
+    @JacksonXmlRootElement(localName = "multistatus", namespace = "DAV:")
     static class MultiStatus {
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper(useWrapping = false)
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(localName = "response", namespace = "DAV:")
-        private java.util.List<DavResponse> responses = new java.util.ArrayList<>();
+        @JacksonXmlElementWrapper(useWrapping = false)
+        @JacksonXmlProperty(localName = "response", namespace = "DAV:")
+        private List<DavResponse> responses = new ArrayList<>();
 
         public void addResponse(DavResponse response) {
             responses.add(response);
         }
 
-        public java.util.List<DavResponse> getResponses() {
+        public List<DavResponse> getResponses() {
             return responses;
         }
     }
 
     static class DavResponse {
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private String href;
 
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private PropStat propstat;
 
         public void setHref(String href) {
@@ -667,10 +685,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     }
 
     static class PropStat {
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private Prop prop;
 
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private String status;
 
         public void setProp(Prop prop) {
@@ -690,21 +708,21 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
-    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     static class Prop {
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private String displayname;
 
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private ResourceType resourcetype;
 
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private String getcontentlength;
 
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private String getlastmodified;
 
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private String creationdate;
 
         public void setDisplayname(String name) {
@@ -748,9 +766,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         }
     }
 
-    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     static class ResourceType {
-        @com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty(namespace = "DAV:")
+        @JacksonXmlProperty(namespace = "DAV:")
         private Collection collection;
 
         public ResourceType(Collection collection) {
@@ -781,17 +799,19 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             return;
         }
 
-        sendDownloadResponse(context, request, id);
+        sendDownloadResponse(context, request, id, true);
     }
 
     /**
      * 发送下载响应（断点续传核心逻辑）
      * 
-     * @param context ChannelHandlerContext
-     * @param request HttpRequest
-     * @param id      文件ID
+     * @param context      ChannelHandlerContext
+     * @param request      HttpRequest
+     * @param id           文件ID
+     * @param asAttachment 是否作为附件下载 (WebDAV GET 通常为 false)
      */
-    private void sendDownloadResponse(ChannelHandlerContext context, HttpRequest request, long id) throws Exception {
+    private void sendDownloadResponse(ChannelHandlerContext context, HttpRequest request, long id, boolean asAttachment)
+            throws Exception {
         try {
             // 获取全量资源以确认文件存在并获取总大小
             var downloadResource = fileService.startDownload(id, 0, Long.MAX_VALUE);
@@ -833,10 +853,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
             response.headers().set(HttpHeaderNames.ACCEPT_RANGES, "bytes");
 
-            // URL 编码文件名
-            var encodedFilename = java.net.URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
-            response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION,
-                    "attachment; filename*=UTF-8''" + encodedFilename);
+            if (asAttachment) {
+                // URL 编码文件名
+                var encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+                response.headers().set(HttpHeaderNames.CONTENT_DISPOSITION,
+                        "attachment; filename*=UTF-8''" + encodedFilename);
+            }
 
             if (range.isPartial()) {
                 response.headers().set(HttpHeaderNames.CONTENT_RANGE,
