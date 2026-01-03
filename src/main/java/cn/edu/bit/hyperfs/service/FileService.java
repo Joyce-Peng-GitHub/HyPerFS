@@ -187,6 +187,21 @@ public class FileService {
     }
 
     /**
+     * 移动节点并重命名
+     *
+     * @param id             节点ID
+     * @param targetParentId 目标父节点ID
+     * @param targetName     目标名称
+     * @param strategy       冲突解决策略
+     * @throws Exception 移动失败
+     */
+    public void moveNode(long id, long targetParentId, String targetName, String strategy) throws Exception {
+        logger.info("Moving node: id={}, targetParentId={}, targetName={}, strategy={}", id, targetParentId, targetName,
+                strategy);
+        databaseService.moveNode(id, targetParentId, targetName, strategy);
+    }
+
+    /**
      * 重命名节点
      * 
      * 详细描述：

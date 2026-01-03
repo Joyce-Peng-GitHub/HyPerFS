@@ -299,6 +299,29 @@ public class DatabaseService {
      * @throws Exception 业务异常或数据库异常
      */
     public void moveNode(long id, long targetParentId, String strategy) throws Exception {
+        // Find existing name
+        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+            var source = fileMetaDao.getById(connection, id);
+            if (source == null) {
+                throw new MoveException("Source node not found");
+            }
+            moveNode(id, targetParentId, source.getName(), strategy);
+        }
+    }
+
+    /**
+     * 将节点移动到新的父节点下，并指定目标名称
+     * 
+     * 详细描述：
+     * 实现文件或文件夹的移动功能，同时支持重命名。
+     *
+     * @param id             要移动的节点ID
+     * @param targetParentId 目标父节点ID
+     * @param targetName     目标名称
+     * @param strategy       冲突解决策略："FAIL"（失败）、"RENAME"（重命名）、"OVERWRITE"（覆盖）
+     * @throws Exception 业务异常或数据库异常
+     */
+    public void moveNode(long id, long targetParentId, String targetName, String strategy) throws Exception {
         try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -308,8 +331,14 @@ public class DatabaseService {
                     throw new MoveException("Source node not found: " + id);
                 }
 
-                if (source.getParentId() == targetParentId) {
-                    throw new MoveException("Source and destination folders are the same.");
+                // 如果移动到同一目录且名称相同，直接返回（无操作）
+                if (source.getParentId() == targetParentId && source.getName().equals(targetName)) {
+                    return;
+                }
+
+                // 环路检测：源和目标不能是同一个，或者移动到自己的子目录
+                if (source.getId() == targetParentId) {
+                    throw new MoveException("Cannot move a node into itself");
                 }
 
                 // 检查目标文件夹是否存在（如果不是根目录）
@@ -337,16 +366,23 @@ public class DatabaseService {
                     }
                 }
 
-                var finalName = source.getName();
+                var finalName = targetName;
 
                 // 检查是否有名称冲突
-                var conflict = fileMetaDao.getByParentIdAndName(connection, targetParentId,
-                        source.getName());
+                var conflict = fileMetaDao.getByParentIdAndName(connection, targetParentId, targetName);
                 if (conflict != null) {
+                    // 如果是同一个节点（即原位重命名），且名称目标名称就是原名称（前面已处理），或者不影响
+                    if (conflict.getId() == id) {
+                        // 目标名称已存在且就是自己，说明是原位操作但名字没变？前面已 return。
+                        // 实际上这种情况不应发生，除非 parentId != targetParentid 但 name 相同，但这里是 getByParentIdAndName
+                        // 所以这里 conflict 就是自己，且 targetParentId == source.getParentId()，已经 return 了。
+                        // 所以这里 conflict 肯定是另一个节点
+                    }
+
                     // 根据策略处理冲突
                     if ("RENAME".equalsIgnoreCase(strategy)) {
                         // 寻找可用的名称：原名 (序号)
-                        var baseName = source.getName();
+                        var baseName = targetName;
                         var fileNameWithoutExtension = baseName;
                         var fileExtension = "";
                         var lastDotIndex = baseName.lastIndexOf('.');
@@ -366,7 +402,17 @@ public class DatabaseService {
                         if (source.getIsFolder() == 1 || conflict.getIsFolder() == 1) {
                             throw new MoveException("Cannot overwrite folder or with folder");
                         }
-                        // 删除冲突节点
+
+                        // 优化：针对文件覆盖文件的情况，如果是不同文件内容
+                        if (!source.getHash().equals(conflict.getHash())) {
+                            fileStorageDao.decrementReferenceCount(connection, conflict.getHash());
+                            fileStorageDao.incrementReferenceCount(connection, source.getHash());
+                        }
+
+                        // 直接更新冲突节点的元数据为源节点的内容（实现覆盖效果），然后删除源节点
+                        // 或者：删除冲突节点，移动源节点
+                        // 采用删除冲突节点，移动源节点比较清晰
+
                         deleteNodeRecursive(connection, conflict.getId());
                     } else {
                         // 默认策略：失败

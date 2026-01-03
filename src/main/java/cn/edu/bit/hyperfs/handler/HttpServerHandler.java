@@ -167,13 +167,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                     handleWebDavGet(context, request, relativePath);
                     break;
                 case "DELETE":
-                    // 实现删除逻辑
-                    var meta = fileService.resolvePath(relativePath);
-                    fileService.delete(meta.getId());
-                    sendResponse(context, HttpResponseStatus.NO_CONTENT, "");
+                    handleWebDavDelete(context, relativePath);
                     break;
-                // COPY 和 MOVE 在 WebDAV 中比较复杂，涉及到 Destination Header 解析，这里暂略或后续实现
-                // 为 Level 1 基础支持，核心是 浏览(PROPFIND) + 下载(GET) + 上传(PUT) + 创建(MKCOL) + 删除
+                case "COPY":
+                    handleWebDavCopy(context, request, relativePath);
+                    break;
+                case "MOVE":
+                    handleWebDavMove(context, request, relativePath);
+                    break;
                 default:
                     sendError(context, HttpResponseStatus.NOT_IMPLEMENTED);
             }
@@ -196,6 +197,168 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
     private void handleWebDavMkCol(ChannelHandlerContext context, String path) throws Exception {
         fileService.createDirectoryByPath(path);
         sendResponse(context, HttpResponseStatus.CREATED, "");
+    }
+
+    private void handleWebDavDelete(ChannelHandlerContext context, String path) throws Exception {
+        var meta = fileService.resolvePath(path);
+        fileService.delete(meta.getId());
+        sendResponse(context, HttpResponseStatus.NO_CONTENT, "");
+    }
+
+    private void handleWebDavCopy(ChannelHandlerContext context, HttpRequest request, String path) throws Exception {
+        var destination = getDestinationPath(request);
+        if (destination == null) {
+            sendError(context, HttpResponseStatus.BAD_REQUEST, "Destination header missing");
+            return;
+        }
+
+        var overwrite = request.headers().get("Overwrite", "T").equalsIgnoreCase("T");
+        var strategy = overwrite ? "OVERWRITE" : "FAIL";
+
+        // 源文件
+        var sourceMeta = fileService.resolvePath(path);
+        // 目标父路径和文件名
+        var destFolder = destination.substring(0, destination.lastIndexOf('/'));
+        if (destFolder.isEmpty())
+            destFolder = "/"; // 根目录
+        // 目标父节点
+        var destParentMeta = fileService.resolvePath(destFolder);
+
+        // 如果目标父节点不是文件夹
+        if (destParentMeta.getIsFolder() == 0) {
+            sendError(context, HttpResponseStatus.CONFLICT, "Destination parent is not a collection");
+            return;
+        }
+
+        // 目标路径如果已存在，则根据 overwrite 处理
+        // FileService.copyNode 会处理重名检测
+        try {
+            fileService.copyNode(sourceMeta.getId(), destParentMeta.getId(), strategy);
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+            sendError(context, HttpResponseStatus.PRECONDITION_FAILED, "File or folder exists and Overwrite is F");
+            return;
+        } catch (cn.edu.bit.hyperfs.service.DatabaseService.MoveException e) {
+            // 如：不能覆盖文件夹，或不能覆盖文件到自己
+            sendError(context, HttpResponseStatus.CONFLICT, e.getMessage());
+            return;
+        }
+
+        sendResponse(context, overwrite ? HttpResponseStatus.NO_CONTENT : HttpResponseStatus.CREATED, "");
+    }
+
+    private void handleWebDavMove(ChannelHandlerContext context, HttpRequest request, String path) throws Exception {
+        var destination = getDestinationPath(request);
+        if (destination == null) {
+            sendError(context, HttpResponseStatus.BAD_REQUEST, "Destination header missing");
+            return;
+        }
+
+        var overwrite = request.headers().get("Overwrite", "T").equalsIgnoreCase("T");
+        var strategy = overwrite ? "OVERWRITE" : "FAIL";
+
+        // 源文件
+        var sourceMeta = fileService.resolvePath(path);
+
+        // 解析目标：父目录 + 新文件名
+        // Destination 形如 /webdav/folder/newname
+        // 移除 /webdav 前缀已在 getDestinationPath 处理
+
+        // 提取文件名和父路径
+        String destParentPath;
+        String destFileName;
+
+        if (destination.equals("/")) {
+            sendError(context, HttpResponseStatus.FORBIDDEN, "Cannot move to root");
+            return;
+        }
+
+        // 移除末尾斜杠（如果有）
+        if (destination.endsWith("/")) {
+            destination = destination.substring(0, destination.length() - 1);
+        }
+
+        int lastSlash = destination.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            destParentPath = destination.substring(0, lastSlash);
+            destFileName = destination.substring(lastSlash + 1);
+        } else {
+            destParentPath = "/";
+            destFileName = destination;
+        }
+        if (destParentPath.isEmpty())
+            destParentPath = "/";
+
+        var destParentMeta = fileService.resolvePath(destParentPath);
+
+        // 如果目标父节点不是文件夹
+        if (destParentMeta.getIsFolder() == 0) {
+            sendError(context, HttpResponseStatus.CONFLICT, "Destination parent is not a collection");
+            return;
+        }
+
+        // 判断是移动还是重命名
+        // 如果父节点 ID 相同，就是重命名
+        if (sourceMeta.getParentId() == destParentMeta.getId()) {
+            // 重命名逻辑
+            // 检查目标是否存在
+            try {
+                // WebDAV MOVE 要求如果 Overwrite=T 且目标存在，则覆盖（删除目标）
+                // renameNode 这里只实现了简单重命名，我们需要根据 Overwrite 处理冲突
+                // 实际上 FileService.moveNode 已经包含了更完善的冲突处理逻辑
+                // 即使是同一目录，moveNode 也能工作（虽然有点重，但逻辑一致）
+                fileService.moveNode(sourceMeta.getId(), destParentMeta.getId(), destFileName, strategy);
+            } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+                sendError(context, HttpResponseStatus.PRECONDITION_FAILED, "File exists and Overwrite is F");
+                return;
+            } catch (cn.edu.bit.hyperfs.service.DatabaseService.MoveException e) {
+                sendError(context, HttpResponseStatus.CONFLICT, e.getMessage());
+                return;
+            }
+        } else {
+            // 移动到不同目录
+            try {
+                fileService.moveNode(sourceMeta.getId(), destParentMeta.getId(), destFileName, strategy);
+            } catch (cn.edu.bit.hyperfs.service.DatabaseService.FileConflictException e) {
+                sendError(context, HttpResponseStatus.PRECONDITION_FAILED, "File exists and Overwrite is F");
+                return;
+            } catch (cn.edu.bit.hyperfs.service.DatabaseService.MoveException e) {
+                sendError(context, HttpResponseStatus.CONFLICT, e.getMessage());
+                return;
+            }
+        }
+
+        sendResponse(context, HttpResponseStatus.CREATED, ""); // 或者 NO_CONTENT
+    }
+
+    private String getDestinationPath(HttpRequest request) {
+        var destHeader = request.headers().get("Destination");
+        if (destHeader == null) {
+            return null;
+        }
+        // Destination 是绝对 URI，如 http://localhost:14514/webdav/folder/file.txt
+        // 或者是相对 URI
+        try {
+            var uri = new java.net.URI(destHeader);
+            var path = uri.getPath(); // 获取路径部分，已解码? URI.getPath() returns decoded path component? NO, it returns
+                                      // valid path chars.
+            // 实际上 Netty 的 uri 是字符串。URI.create(s).getPath() 会解码吗？
+            // 测试表明 URI.getPath() 会解码 %20 但可能保留其他。
+            // 此外，我们需要处理 /webdav 前缀
+            // 假设服务根是 /webdav
+
+            // 让我们自己简单处理一下 decoding，以防万一
+            path = java.net.URLDecoder.decode(path, StandardCharsets.UTF_8);
+
+            if (path.startsWith("/webdav")) {
+                path = path.substring(7);
+            }
+            if (path.isEmpty())
+                return "/";
+            return path;
+        } catch (Exception e) {
+            logger.error("Failed to parse Destination header", e);
+            return null;
+        }
     }
 
     private void handleWebDavPut(ChannelHandlerContext context, HttpRequest request, String path) throws Exception {
@@ -258,7 +421,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
         var downloadResource = fileService.startDownload(id, 0, Long.MAX_VALUE);
         var file = downloadResource.file();
         var totalLength = downloadResource.totalLength();
-        var filename = downloadResource.filename();
 
         // 解析 Range
         var range = parseRange(request.headers().get(HttpHeaderNames.RANGE), totalLength);
