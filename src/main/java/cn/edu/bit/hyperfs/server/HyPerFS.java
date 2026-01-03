@@ -13,6 +13,9 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import io.netty.util.concurrent.EventExecutorGroup;
+
 public class HyPerFS {
     private static final Logger logger = LoggerFactory.getLogger(HyPerFS.class);
     private final int port;
@@ -26,7 +29,8 @@ public class HyPerFS {
         // 创建Reactor线程组
         var bossGroup = new NioEventLoopGroup(1); // 用于接收连接
         var workerGroup = new NioEventLoopGroup(); // 用于处理网络IO
-        var businessGroup = new NioEventLoopGroup(); // 用于处理业务逻辑
+        // 使用 DefaultEventExecutorGroup 处理阻塞业务逻辑，线程数设置为 32
+        EventExecutorGroup businessGroup = new DefaultEventExecutorGroup(32);
 
         try {
             var serverBootstrap = new ServerBootstrap();
@@ -49,9 +53,9 @@ public class HyPerFS {
 
             ChannelFuture channelFuture = serverBootstrap.bind(port).sync(); // 绑定端口并同步等待
             channelFuture.channel().closeFuture().sync();
-        } catch (Exception e) {
-            logger.error("Server start failed", e);
-            throw e;
+        } catch (Exception exception) {
+            logger.error("Server start failed", exception);
+            throw exception;
         } finally {
             logger.info("Stopping HyPerFS server...");
             bossGroup.shutdownGracefully();

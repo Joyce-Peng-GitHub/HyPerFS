@@ -6,6 +6,7 @@ import cn.edu.bit.hyperfs.entity.FileMetaEntity;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import javax.sql.DataSource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,7 @@ public class DatabaseService {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseService.class);
     private final FileStorageDao fileStorageDao = new FileStorageDao();
     private final FileMetaDao fileMetaDao = new FileMetaDao();
+    private final DataSource dataSource = DatabaseFactory.getInstance().getDataSource();
 
     /**
      * 根据内容哈希值和大小查询文件内容是否已存在
@@ -29,7 +31,7 @@ public class DatabaseService {
      * @throws IllegalStateException 如果发现哈希碰撞（哈希值相同但大小不同）
      */
     public boolean existsByHash(String hash, long size) throws SQLException {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             var entity = fileStorageDao.getByHash(connection, hash);
             if (entity != null) {
                 if (entity.getSize() == size) {
@@ -53,7 +55,7 @@ public class DatabaseService {
      * @throws SQLException 数据库查询错误
      */
     public ArrayList<FileMetaEntity> getList(long parentId) throws SQLException {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             return fileMetaDao.getByParentId(connection, parentId);
         }
     }
@@ -74,7 +76,7 @@ public class DatabaseService {
      * @throws Exception 业务逻辑异常或数据库异常
      */
     public InsertFileResult insertFile(long parentId, String filename, String hash, long size) throws Exception {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false); // 开启事务
             try {
                 // 检查对应目录下有没有同名节点
@@ -145,7 +147,7 @@ public class DatabaseService {
         if (result.isDuplicated()) {
             return;
         }
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 // 用ID获取节点信息
@@ -174,7 +176,7 @@ public class DatabaseService {
      * @throws Exception 如果存在同名节点或其他数据库错误
      */
     public long insertFolder(long parentId, String filename) throws Exception {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 var existingNode = fileMetaDao.getByParentIdAndName(connection, parentId, filename);
@@ -204,7 +206,7 @@ public class DatabaseService {
      * @throws SQLException 数据库错误
      */
     public void deleteNode(long id) throws SQLException {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 deleteNodeRecursive(connection, id);
@@ -246,7 +248,7 @@ public class DatabaseService {
      * @throws SQLException 数据库错误
      */
     public void incrementDownloadCount(long id) throws SQLException {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             fileMetaDao.incrementDownloadCountById(connection, id);
         }
     }
@@ -262,8 +264,22 @@ public class DatabaseService {
      * @throws SQLException 数据库错误
      */
     public FileMetaEntity getFileMeta(long id) throws SQLException {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             return fileMetaDao.getById(connection, id);
+        }
+    }
+
+    /**
+     * 根据父节点ID和名称查询节点
+     *
+     * @param parentId 父节点ID
+     * @param name     节点名称
+     * @return 节点元数据，不存在则返回 null
+     * @throws SQLException 数据库异常
+     */
+    public FileMetaEntity getByParentIdAndName(long parentId, String name) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return fileMetaDao.getByParentIdAndName(connection, parentId, name);
         }
     }
 
@@ -300,7 +316,7 @@ public class DatabaseService {
      */
     public void moveNode(long id, long targetParentId, String strategy) throws Exception {
         // Find existing name
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             var source = fileMetaDao.getById(connection, id);
             if (source == null) {
                 throw new MoveException("Source node not found");
@@ -322,7 +338,7 @@ public class DatabaseService {
      * @throws Exception 业务异常或数据库异常
      */
     public void moveNode(long id, long targetParentId, String targetName, String strategy) throws Exception {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 // 检查源节点是否存在
@@ -374,9 +390,6 @@ public class DatabaseService {
                     // 如果是同一个节点（即原位重命名），且名称目标名称就是原名称（前面已处理），或者不影响
                     if (conflict.getId() == id) {
                         // 目标名称已存在且就是自己，说明是原位操作但名字没变？前面已 return。
-                        // 实际上这种情况不应发生，除非 parentId != targetParentid 但 name 相同，但这里是 getByParentIdAndName
-                        // 所以这里 conflict 就是自己，且 targetParentId == source.getParentId()，已经 return 了。
-                        // 所以这里 conflict 肯定是另一个节点
                     }
 
                     // 根据策略处理冲突
@@ -446,7 +459,7 @@ public class DatabaseService {
      * @throws MoveException 如果节点不存在或发生名称冲突
      */
     public void renameNode(long id, String newName) throws SQLException, MoveException {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 var node = fileMetaDao.getById(connection, id);
@@ -489,7 +502,7 @@ public class DatabaseService {
      * @throws Exception 操作过程中发生的异常
      */
     public void copyNode(long id, long targetParentId, String strategy) throws Exception {
-        try (var connection = DatabaseFactory.getInstance().getDataSource().getConnection()) {
+        try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 // 获取源节点

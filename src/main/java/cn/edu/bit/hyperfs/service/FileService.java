@@ -269,20 +269,12 @@ public class FileService {
                 continue;
             }
 
-            var children = databaseService.getList(currentParentId);
-            boolean found = false;
-            for (var meta : children) {
-                if (meta.getName().equals(component)) {
-                    currentMeta = meta;
-                    currentParentId = meta.getId();
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
+            var meta = databaseService.getByParentIdAndName(currentParentId, component);
+            if (meta == null) {
                 throw new java.io.FileNotFoundException("Path not found: " + path);
             }
+            currentMeta = meta;
+            currentParentId = meta.getId();
         }
 
         return currentMeta;
