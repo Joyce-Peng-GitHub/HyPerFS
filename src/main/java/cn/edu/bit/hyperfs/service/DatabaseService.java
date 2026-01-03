@@ -72,12 +72,13 @@ public class DatabaseService {
      * @param filename 文件名
      * @param hash     文件内容的哈希值
      * @param size     文件大小
-     * @return 插入结果对象，包含是否重复和节点ID
+     * @return 插入结果对象，包含是否重复、节点ID以及待删除的物理文件列表
      * @throws Exception 业务逻辑异常或数据库异常
      */
     public InsertFileResult insertFile(long parentId, String filename, String hash, long size) throws Exception {
         try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false); // 开启事务
+            var deletedHashes = new ArrayList<String>();
             try {
                 // 检查对应目录下有没有同名节点
                 var existingNode = fileMetaDao.getByParentIdAndName(connection, parentId, filename);
@@ -95,7 +96,7 @@ public class DatabaseService {
                     var time = System.currentTimeMillis();
                     var id = fileMetaDao.insertFile(connection, parentId, filename, hash, size, time);
                     connection.commit();
-                    return new InsertFileResult(false, id);
+                    return new InsertFileResult(false, id, deletedHashes);
                 } else {
                     // 有同名节点
                     if (existingNode.getIsFolder() == 1) {
@@ -105,11 +106,11 @@ public class DatabaseService {
                     if (existingNode.getHash().equals(hash)) {
                         // 同名且哈希相同，直接返回
                         connection.commit();
-                        return new InsertFileResult(true, existingNode.getId());
+                        return new InsertFileResult(true, existingNode.getId(), deletedHashes);
                     } else {
                         // 同名但哈希不同
                         // 减少原文件的引用计数
-                        fileStorageDao.decrementReferenceCount(connection, existingNode.getHash());
+                        decrementAndCleanup(connection, existingNode.getHash(), deletedHashes);
 
                         // 增加新文件的引用计数
                         var storage = fileStorageDao.getByHash(connection, hash);
@@ -122,7 +123,7 @@ public class DatabaseService {
                         var time = System.currentTimeMillis();
                         fileMetaDao.updateById(connection, existingNode.getId(), hash, size, time);
                         connection.commit();
-                        return new InsertFileResult(false, existingNode.getId());
+                        return new InsertFileResult(false, existingNode.getId(), deletedHashes);
                     }
                 }
             } catch (Exception exception) {
@@ -151,9 +152,10 @@ public class DatabaseService {
             connection.setAutoCommit(false);
             try {
                 // 用ID获取节点信息
+                var deletedHashes = new ArrayList<String>();
                 var entity = fileMetaDao.getById(connection, result.id());
                 if (entity != null) {
-                    fileStorageDao.decrementReferenceCount(connection, entity.getHash());
+                    decrementAndCleanup(connection, entity.getHash(), deletedHashes);
                     fileMetaDao.removeById(connection, result.id());
                 }
                 connection.commit();
@@ -201,16 +203,20 @@ public class DatabaseService {
      * 详细描述：
      * 递归删除指定ID的节点。如果是文件夹，会删除其所有子孙节点。
      * 如果是文件，会删除元数据并更新存储引用计数。
+     * 如果存储引用计数降为0，则清理存储记录，并返回这些文件的哈希值以便物理删除。
      *
      * @param id 要删除的节点ID
+     * @return 待物理删除的文件哈希列表
      * @throws SQLException 数据库错误
      */
-    public void deleteNode(long id) throws SQLException {
+    public ArrayList<String> deleteNode(long id) throws SQLException {
         try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
+            var deletedHashes = new ArrayList<String>();
             try {
-                deleteNodeRecursive(connection, id);
+                deleteNodeRecursive(connection, id, deletedHashes);
                 connection.commit();
+                return deletedHashes;
             } catch (Exception exception) {
                 logger.error("Error deleting node, rolling back", exception);
                 connection.rollback();
@@ -219,7 +225,8 @@ public class DatabaseService {
         }
     }
 
-    private void deleteNodeRecursive(java.sql.Connection connection, long id) throws SQLException {
+    private void deleteNodeRecursive(java.sql.Connection connection, long id, ArrayList<String> deletedHashes)
+            throws SQLException {
         var entity = fileMetaDao.getById(connection, id);
         if (entity == null) {
             return;
@@ -229,13 +236,24 @@ public class DatabaseService {
             // 递归删除子节点
             var children = fileMetaDao.getByParentId(connection, id);
             for (var child : children) {
-                deleteNodeRecursive(connection, child.getId());
+                deleteNodeRecursive(connection, child.getId(), deletedHashes);
             }
         } else {
             // 文件，减少引用计数
-            fileStorageDao.decrementReferenceCount(connection, entity.getHash());
+            decrementAndCleanup(connection, entity.getHash(), deletedHashes);
         }
         fileMetaDao.removeById(connection, id);
+    }
+
+    // 辅助方法：减少引用计数，如果为0则删除存储记录并添加到待删除列表
+    private void decrementAndCleanup(Connection connection, String hash, ArrayList<String> deletedHashes)
+            throws SQLException {
+        int newCount = fileStorageDao.decrementReferenceCountAndGet(connection, hash);
+        if (newCount <= 0) {
+            fileStorageDao.deleteByHash(connection, hash);
+            deletedHashes.add(hash);
+            logger.info("File storage reference count reached 0, marked for physical deletion: {}", hash);
+        }
     }
 
     /**
@@ -314,14 +332,14 @@ public class DatabaseService {
      * @param strategy       冲突解决策略："FAIL"（失败）、"RENAME"（重命名）、"OVERWRITE"（覆盖）
      * @throws Exception 业务异常或数据库异常
      */
-    public void moveNode(long id, long targetParentId, String strategy) throws Exception {
+    public ArrayList<String> moveNode(long id, long targetParentId, String strategy) throws Exception {
         // Find existing name
         try (var connection = dataSource.getConnection()) {
             var source = fileMetaDao.getById(connection, id);
             if (source == null) {
                 throw new MoveException("Source node not found");
             }
-            moveNode(id, targetParentId, source.getName(), strategy);
+            return moveNode(id, targetParentId, source.getName(), strategy);
         }
     }
 
@@ -337,9 +355,11 @@ public class DatabaseService {
      * @param strategy       冲突解决策略："FAIL"（失败）、"RENAME"（重命名）、"OVERWRITE"（覆盖）
      * @throws Exception 业务异常或数据库异常
      */
-    public void moveNode(long id, long targetParentId, String targetName, String strategy) throws Exception {
+    public ArrayList<String> moveNode(long id, long targetParentId, String targetName, String strategy)
+            throws Exception {
         try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
+            var deletedHashes = new ArrayList<String>();
             try {
                 // 检查源节点是否存在
                 var source = fileMetaDao.getById(connection, id);
@@ -349,7 +369,8 @@ public class DatabaseService {
 
                 // 如果移动到同一目录且名称相同，直接返回（无操作）
                 if (source.getParentId() == targetParentId && source.getName().equals(targetName)) {
-                    return;
+                    connection.rollback();
+                    return deletedHashes;
                 }
 
                 // 环路检测：源和目标不能是同一个，或者移动到自己的子目录
@@ -418,15 +439,12 @@ public class DatabaseService {
 
                         // 优化：针对文件覆盖文件的情况，如果是不同文件内容
                         if (!source.getHash().equals(conflict.getHash())) {
-                            fileStorageDao.decrementReferenceCount(connection, conflict.getHash());
+                            decrementAndCleanup(connection, conflict.getHash(), deletedHashes);
                             fileStorageDao.incrementReferenceCount(connection, source.getHash());
                         }
 
-                        // 直接更新冲突节点的元数据为源节点的内容（实现覆盖效果），然后删除源节点
-                        // 或者：删除冲突节点，移动源节点
                         // 采用删除冲突节点，移动源节点比较清晰
-
-                        deleteNodeRecursive(connection, conflict.getId());
+                        deleteNodeRecursive(connection, conflict.getId(), deletedHashes);
                     } else {
                         // 默认策略：失败
                         throw new FileConflictException(
@@ -438,6 +456,7 @@ public class DatabaseService {
                 fileMetaDao.updateParentIdAndName(connection, id, targetParentId, finalName);
 
                 connection.commit();
+                return deletedHashes;
             } catch (Exception exception) {
                 connection.rollback();
                 throw exception;
@@ -501,9 +520,10 @@ public class DatabaseService {
      * @param strategy       冲突解决策略："FAIL"、"RENAME"、"OVERWRITE"
      * @throws Exception 操作过程中发生的异常
      */
-    public void copyNode(long id, long targetParentId, String strategy) throws Exception {
+    public ArrayList<String> copyNode(long id, long targetParentId, String strategy) throws Exception {
         try (var connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
+            var deletedHashes = new ArrayList<String>();
             try {
                 // 获取源节点
                 var source = fileMetaDao.getById(connection, id);
@@ -554,23 +574,24 @@ public class DatabaseService {
 
                         // 优化：针对文件覆盖文件的情况，直接更新，避免删除重建
                         if (!source.getHash().equals(conflict.getHash())) {
-                            fileStorageDao.decrementReferenceCount(connection, conflict.getHash());
+                            decrementAndCleanup(connection, conflict.getHash(), deletedHashes);
                             fileStorageDao.incrementReferenceCount(connection, source.getHash());
                         }
 
                         fileMetaDao.updateById(connection, conflict.getId(), source.getHash(), source.getSize(),
                                 System.currentTimeMillis());
                         connection.commit();
-                        return; // 完成覆盖操作
+                        return deletedHashes; // 完成覆盖操作
                     } else {
                         throw new FileConflictException("File with the same name already exists.");
                     }
                 }
 
                 // 执行递归复制
-                copyNodeRecursively(connection, id, targetParentId, targetName);
+                copyNodeRecursively(connection, id, targetParentId, targetName, deletedHashes);
 
                 connection.commit();
+                return deletedHashes;
             } catch (Exception exception) {
                 connection.rollback();
                 throw exception;
@@ -578,7 +599,8 @@ public class DatabaseService {
         }
     }
 
-    private void copyNodeRecursively(Connection connection, long sourceId, long targetParentId, String targetName)
+    private void copyNodeRecursively(Connection connection, long sourceId, long targetParentId, String targetName,
+            ArrayList<String> deletedHashes)
             throws SQLException {
         var source = fileMetaDao.getById(connection, sourceId);
         if (source == null)
@@ -595,7 +617,7 @@ public class DatabaseService {
                     System.currentTimeMillis());
             var children = fileMetaDao.getByParentId(connection, sourceId);
             for (var child : children) {
-                copyNodeRecursively(connection, child.getId(), newFolderId, child.getName());
+                copyNodeRecursively(connection, child.getId(), newFolderId, child.getName(), deletedHashes);
             }
         }
     }

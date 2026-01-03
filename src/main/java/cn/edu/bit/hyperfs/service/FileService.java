@@ -57,8 +57,12 @@ public class FileService {
             uploadSession.close();
             var fileHash = uploadSession.getHashString();
             var fileSize = uploadSession.getSize();
-
             var result = databaseService.insertFile(parentId, fileName, fileHash, fileSize);
+
+            // 处理需要物理删除的文件（例如覆盖旧文件产生的孤儿文件）
+            if (result.deletedHashes() != null && !result.deletedHashes().isEmpty()) {
+                deletePhysicalFiles(result.deletedHashes());
+            }
 
             if (result.isDuplicated()) {
                 // 如果重复，删除临时文件
@@ -151,7 +155,8 @@ public class FileService {
      */
     public void delete(long id) throws Exception {
         logger.info("Deleting node: {}", id);
-        databaseService.deleteNode(id);
+        var deletedHashes = databaseService.deleteNode(id);
+        deletePhysicalFiles(deletedHashes);
     }
 
     /**
@@ -183,7 +188,8 @@ public class FileService {
      */
     public void moveNode(long id, long targetParentId, String strategy) throws Exception {
         logger.info("Moving node: id={}, targetParentId={}, strategy={}", id, targetParentId, strategy);
-        databaseService.moveNode(id, targetParentId, strategy);
+        var deletedHashes = databaseService.moveNode(id, targetParentId, strategy);
+        deletePhysicalFiles(deletedHashes);
     }
 
     /**
@@ -198,7 +204,8 @@ public class FileService {
     public void moveNode(long id, long targetParentId, String targetName, String strategy) throws Exception {
         logger.info("Moving node: id={}, targetParentId={}, targetName={}, strategy={}", id, targetParentId, targetName,
                 strategy);
-        databaseService.moveNode(id, targetParentId, targetName, strategy);
+        var deletedHashes = databaseService.moveNode(id, targetParentId, targetName, strategy);
+        deletePhysicalFiles(deletedHashes);
     }
 
     /**
@@ -229,7 +236,24 @@ public class FileService {
      */
     public void copyNode(long id, long targetParentId, String strategy) throws Exception {
         logger.info("Copying node: id={}, targetParentId={}, strategy={}", id, targetParentId, strategy);
-        databaseService.copyNode(id, targetParentId, strategy);
+        var deletedHashes = databaseService.copyNode(id, targetParentId, strategy);
+        deletePhysicalFiles(deletedHashes);
+    }
+
+    private void deletePhysicalFiles(java.util.List<String> hashes) {
+        if (hashes == null || hashes.isEmpty()) {
+            return;
+        }
+        for (String hash : hashes) {
+            File file = new File(dataDirectory, hash);
+            if (file.exists()) {
+                if (file.delete()) {
+                    logger.info("Physically deleted file: {}", hash);
+                } else {
+                    logger.warn("Failed to physically delete file: {}", hash);
+                }
+            }
+        }
     }
 
     /**

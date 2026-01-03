@@ -45,21 +45,50 @@ public class FileStorageDao {
     }
 
     /**
-     * 减少文件引用计数
+     * 减少文件引用计数并返回最新的计数值
      *
      * @param connection 数据库连接
      * @param hash       文件哈希
-     * @throws SQLException 如果影响行数不为1
+     * @return 更新后的引用计数
+     * @throws SQLException 如果记录不存在
      */
-    public void decrementReferenceCount(Connection connection, String hash) throws SQLException {
-        var sql = "UPDATE file_storage SET ref_cnt = ref_cnt - 1 WHERE hash = ?";
-        try (var preparedStatement = connection.prepareStatement(sql)) {
-            preparedStatement.setString(1, hash);
-            int affectedRows = preparedStatement.executeUpdate();
-            if (affectedRows != 1) {
-                throw new SQLException(
-                        "Failed to decrement reference count, record not found or multiple records modified: " + hash);
+    public int decrementReferenceCountAndGet(Connection connection, String hash) throws SQLException {
+        // 先更新
+        var updateSql = "UPDATE file_storage SET ref_cnt = ref_cnt - 1 WHERE hash = ?";
+        try (var ps = connection.prepareStatement(updateSql)) {
+            ps.setString(1, hash);
+            int affected = ps.executeUpdate();
+            if (affected != 1) {
+                throw new SQLException("Failed to decrement ref count, record not found: " + hash);
             }
+        }
+
+        // 再查询
+        var selectSql = "SELECT ref_cnt FROM file_storage WHERE hash = ?";
+        try (var ps = connection.prepareStatement(selectSql)) {
+            ps.setString(1, hash);
+            try (var rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("ref_cnt");
+                } else {
+                    throw new SQLException("Failed to retrieve ref count after update: " + hash);
+                }
+            }
+        }
+    }
+
+    /**
+     * 删除文件存储记录
+     *
+     * @param connection 数据库连接
+     * @param hash       文件哈希
+     * @throws SQLException SQL异常
+     */
+    public void deleteByHash(Connection connection, String hash) throws SQLException {
+        var sql = "DELETE FROM file_storage WHERE hash = ?";
+        try (var ps = connection.prepareStatement(sql)) {
+            ps.setString(1, hash);
+            ps.executeUpdate();
         }
     }
 
