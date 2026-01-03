@@ -133,7 +133,7 @@ public class PerformanceTest {
             executor.submit(() -> {
                 try {
                     String folderName = "Thread_" + threadId;
-                    long id = fileService.createFolder(testRootId, folderName);
+                    fileService.createFolder(testRootId, folderName);
                     for (int j = 0; j < loops; j++) {
                         fileService.resolvePath("/" + TEST_ROOT_NAME + "/" + folderName);
                     }
