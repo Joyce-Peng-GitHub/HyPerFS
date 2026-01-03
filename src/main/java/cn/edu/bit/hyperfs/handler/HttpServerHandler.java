@@ -1047,10 +1047,10 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             sendError(context, HttpResponseStatus.NOT_FOUND);
             return;
         }
-        // 返回 frontend.html
-        try (var inputStream = getClass().getResourceAsStream("/frontend.html")) {
+        // 返回 index.html
+        try (var inputStream = getClass().getResourceAsStream("/static/index.html")) {
             if (inputStream == null) {
-                sendError(context, HttpResponseStatus.NOT_FOUND, "frontend.html not found");
+                sendError(context, HttpResponseStatus.NOT_FOUND, "index.html not found");
                 return;
             }
             byte[] content = inputStream.readAllBytes();

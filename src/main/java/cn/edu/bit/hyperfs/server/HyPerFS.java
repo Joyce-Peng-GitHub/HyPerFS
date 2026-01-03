@@ -66,7 +66,21 @@ public class HyPerFS {
     }
 
     public static void main(String[] args) throws Exception {
-        int port = 14514;
+        final int defaultPort = 80;
+        int port = defaultPort;
+        if (args.length > 0) {
+            try {
+                int parsedPort = Integer.parseInt(args[0]);
+                if (parsedPort >= 1 && parsedPort <= 65535) {
+                    port = parsedPort;
+                } else {
+                    logger.warn("Port number {} is out of valid range (1-65535), using default port {}", parsedPort,
+                            defaultPort);
+                }
+            } catch (NumberFormatException e) {
+                logger.warn("Failed to parse '{}' as port number, using default port {}", args[0], defaultPort);
+            }
+        }
         new HyPerFS(port).start();
     }
 }
